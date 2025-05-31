@@ -8,10 +8,10 @@ import setting
 
 class MyDataSet(Dataset):
     def __init__(self, map_path, window_size=16):
-        heatmaps = np.load(f"v2\\{setting.dataset_path}\\{map_path}\\heats.npy")
-        pics = np.load(f"v2\\{setting.dataset_path}\\{map_path}\\pics.npy")
-        times = np.load(f"v2\\{setting.dataset_path}\\{map_path}\\times.npy")
-        clicks = np.load(f"v2\\{setting.dataset_path}\\{map_path}\\clicks.npy")
+        heatmaps = np.load(f"{setting.dataset_path}\\{map_path}\\heats.npy")
+        pics = np.load(f"{setting.dataset_path}\\{map_path}\\pics.npy")
+        times = np.load(f"{setting.dataset_path}\\{map_path}\\times.npy")
+        clicks = np.load(f"{setting.dataset_path}\\{map_path}\\clicks.npy")
 
         self.heatmaps = torch.from_numpy(heatmaps).float()
         self.clicks = torch.from_numpy(clicks).float()
