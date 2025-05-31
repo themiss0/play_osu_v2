@@ -9,8 +9,8 @@ import pickle
 def heat_map_generator():
     heatmap_width = setting.heatmap_size[0]
     heatmap_height = setting.heatmap_size[1]
-    for dir in os.listdir("v2/dataset"):
-        dir = "v2/dataset/" + dir
+    for dir in os.listdir("dataset"):
+        dir = "dataset/" + dir
         print("now:" + dir)
         try:
             if not os.path.isdir(dir):

@@ -54,16 +54,16 @@ def main():
             print("waiting play")
 
     print("song over")
-    save_dir = f"v2/dataset/{mem.song} - {mem.version}"
+    save_dir = f"dataset/{mem.song} - {mem.version}"
 
     pics_array = np.stack(pics)
     times_array = np.stack(times)
 
     # 保存
     os.makedirs(save_dir, exist_ok=True)  # exist_ok=True 避免目录已存在时报错
-    np.save(f"v2/dataset\\{mem.song} - {mem.version}\\pics.npy", pics_array)
-    np.save(f"v2/dataset\\{mem.song} - {mem.version}\\times.npy", times_array)
-    pickle.dump(meta, open(f"v2/dataset\\{mem.song} - {mem.version}\\meta.pkl", "wb"))
+    np.save(f"dataset\\{mem.song} - {mem.version}\\pics.npy", pics_array)
+    np.save(f"dataset\\{mem.song} - {mem.version}\\times.npy", times_array)
+    pickle.dump(meta, open(f"dataset\\{mem.song} - {mem.version}\\meta.pkl", "wb"))
 
 
 if __name__ == "__main__":

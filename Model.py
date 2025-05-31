@@ -147,7 +147,7 @@ def train(parameter_path=None):
     # 保存训练好的权重
     torch.save(
         net.state_dict(),
-        f"v2/{setting.net_path}\\heatmap_regression_net{net_version + EPOCHS}.pth",
+        f"{setting.net_path}\\heatmap_regression_net{net_version + EPOCHS}.pth",
     )
     print(f"Model saved to heatmap_regression_net{net_version + EPOCHS}.pth")
 
