@@ -122,7 +122,7 @@ def train(parameter_path=None):
     loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=32)
 
     net.train()
-    EPOCHS = 4
+    EPOCHS = 5
     for epoch in range(EPOCHS):
         total_loss = 0
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")

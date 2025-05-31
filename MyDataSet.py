@@ -15,7 +15,7 @@ class MyDataSet(Dataset):
 
         self.heatmaps = torch.from_numpy(heatmaps).float()
         self.clicks = torch.from_numpy(clicks).float()
-        self.pics = torch.from_numpy(pics).float()
+        self.pics = torch.from_numpy(pics).float() / 255
         self.times = torch.from_numpy(times).float()
 
         self.window_size = window_size
