@@ -1,5 +1,6 @@
 import time
 import cv2
+import torch.utils
 from Controller import Controller
 import pygetwindow as gw
 from MemReader import MemReader
@@ -15,83 +16,92 @@ import setting
 from Camera import Camera
 import torch
 import torch.nn as nn
+import torchvision
 
 
-net_version = 10
+# 超参
+batch_size = 32
+net_version = 1
 input_len = 16
 hidden_size = 128
+status_len = 16
+EPOCHS = 5
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch_directml.device()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch_directml.device()
 
 
 class Net(nn.Module):
 
     def __init__(self):
-        # 16 * 1 * 96 * 72
-        self.img_size = setting.heatmap_size
-        super(Net, self).__init__()
-        self.input_len = input_len
-        self.rnn_input_size = self.img_size[0] * self.img_size[1] * 4
-
-        # 主编码器 -> 空间特征
-        self.pic_encoder = nn.Sequential(
-            nn.Conv2d(1, 32, 3, padding=1),  # (B*S, 1, H, W) → (B*S, 32, H, W)
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # → (B*S, 32, H/2, W/2)
-            nn.Conv2d(32, 64, 3, padding=1),  # (B*S, 64, H/2, W/2)
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # → (B*S, 64, H/4, W/4)
+        super().__init__()
+        height, weight = setting.heatmap_size
+        self.cnn = torchvision.models.resnet18(
+            torchvision.models.ResNet18_Weights.DEFAULT
         )
-        # -> 时序特征
-        self.rnn = nn.RNN(self.rnn_input_size, hidden_size, batch_first=True)
-
-        # heatmap分支解码
-        self.heatmap_decoder = nn.Sequential(
-            nn.Linear(hidden_size, self.rnn_input_size),
-            nn.Unflatten(1, (64, self.img_size[0] // 4, self.img_size[1] // 4)),
-            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
-            nn.BatchNorm2d(32),
+        self.cnn.conv1 = torch.nn.Conv2d(
+            1,
+            64,
+            kernel_size=(7, 7),
+            stride=(2, 2),
+            padding=(3, 3),
+            bias=False,
+        )
+        self.cnn.fc = torch.nn.Identity()
+        self.rnn = torch.nn.RNN(
+            512,
+            hidden_size,
+            batch_first=True,
+        )
+        self.rnn_norm = torch.nn.LayerNorm((128))
+        self.heat_predict = nn.Sequential(
+            nn.Linear(hidden_size, 4 * 18 * 24),
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2),
-            nn.BatchNorm2d(16),
+            nn.Unflatten(-1, (4, 18, 24)),
+            nn.ConvTranspose2d(4, 16, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(16, 1, kernel_size=1),
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 1, kernel_size=3, padding=1),
             nn.Sigmoid(),
         )
-
-        # Click分支解码
-        self.click_predictor = nn.Sequential(
-            nn.Linear(hidden_size, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid(),  # Click probability
+        self.click_predict = torch.nn.Sequential(
+            torch.nn.Linear(hidden_size, 256),
+            torch.nn.BatchNorm1d(256),
+            torch.nn.ReLU(),
+            torch.nn.Linear(256, 128),
+            torch.nn.BatchNorm1d(128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 1),
+            torch.nn.Sigmoid(),
         )
 
-    def forward(self, pics):
-        B, T, C, H, W = pics.shape
-        pics = pics.view(B * T, C, H, W)
-        pic_feat = self.pic_encoder(pics)  # (B*T, 16, H/4, W/4)
-        # Flatten
-        pic_feat = pic_feat.view(B, T, -1)
+    def forward(self, frames, status=[0.0 for i in range(status_len)]):
+        print(f"frames shape before cnn: {frames.shape}")
+        B, T, C, H, W = frames.shape
+        frames = frames.view(B * T, C, H, W)
+        frames = torch.nn.functional.interpolate(
+            frames, size=(224, 224), mode="bilinear", align_corners=False
+        )  # (B, T, 1, 224, 224)
+        frames = self.cnn(frames)
+        frames = frames.view(B, T, -1)  # (B, T, 512)
+        print(f"frames shape after cnn: {frames.shape}")
+        rnn_out, _ = self.rnn(frames)
+        rnn_out = self.rnn_norm(rnn_out[:, -1])  # (B, hiddensize)
+        print(f"rnn_out shape: {rnn_out.shape}")
 
-        # RNN temporal encoder
-        rnn_out, _ = self.rnn(pic_feat)  # (B, T, hidden_size)
-        last_out = rnn_out[:, -1]  # Last frame's feature (B, H)
-
-        heat_pred = self.heatmap_decoder(last_out).view(B, 1, H, W)
-        click_prob = self.click_predictor(last_out).squeeze(1)  # (B,)
-
-        return heat_pred, click_prob
+        heatmap_predict = self.heat_predict(rnn_out)
+        print(f"heatmap_predict shape: {heatmap_predict.shape}")
+        click_predict = self.click_predict(rnn_out)
+        print(f"click_predict shape: {click_predict.shape}")
+        return [heatmap_predict, click_predict]
 
 
 # === 多任务损失 ===
 class MultiTaskLoss(nn.Module):
     def __init__(self, heat_weight=1.0, click_weight=1.0):
         super().__init__()
-        self.heat_loss = nn.BCELoss()
+        self.heat_loss = nn.MSELoss()
         self.click_loss = nn.BCELoss()
         self.heat_weight = heat_weight
         self.click_weight = click_weight
@@ -119,10 +129,9 @@ def train(parameter_path=None):
     map_sets = []
     map_sets.append(MyDataSet("Zeke and Luther Theme Song (TV Size) - Smoke's Insane"))
 
-    loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=32)
+    loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=batch_size)
 
     net.train()
-    EPOCHS = 5
     for epoch in range(EPOCHS):
         total_loss = 0
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
@@ -147,9 +156,9 @@ def train(parameter_path=None):
     # 保存训练好的权重
     torch.save(
         net.state_dict(),
-        f"{setting.net_path}\\heatmap_regression_net{net_version + EPOCHS}.pth",
+        f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth",
     )
-    print(f"Model saved to heatmap_regression_net{net_version + EPOCHS}.pth")
+    print(f"Model saved to heatmap_regression_net{net_version}_{EPOCHS}.pth")
 
 
 def test(parameter_path):
@@ -252,5 +261,5 @@ def get_peak_position(heatmap):
 
 
 if __name__ == "__main__":
-    # train(f"{setting.net_path}\\heatmap_regression_net{net_version}.pth")
-    test(f"{setting.net_path}\\heatmap_regression_net{net_version}.pth")
+    train(f"{setting.net_path}/heatmap_regression_net{net_version}.pth")
+    # test(f"{setting.net_path}/heatmap_regression_net{net_version}.pth")

@@ -29,7 +29,7 @@ class MemReader:
     def get_map(self):
         try:
             js = self.get_json()
-            file_path = js["folders"]["songs"] + "\\" + js["directPath"]["beatmapFile"]
+            file_path = js["folders"]["songs"] + "/" + js["directPath"]["beatmapFile"]
             map_data = []
             with open(file_path, "r", encoding="utf-8") as file:
                 isHitObj = False

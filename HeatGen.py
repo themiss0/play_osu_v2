@@ -128,5 +128,6 @@ def heat_map_generator():
         np.save(dir + "/" + "clicks.npy", clicks)
         np.save(dir + "/" + "heats.npy", heatmaps)
 
+
 if __name__ == "__main__":
     heat_map_generator()

@@ -169,9 +169,9 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
 
 
 def heatmap_viewer(name, version):
-    pics = np.load(f"dataset\\{name} - {version}\\pics.npy")
-    heats = np.load(f"dataset\\{name} - {version}\\heats.npy")
-    clicks = np.load(f"dataset\\{name} - {version}\\clicks.npy")
+    pics = np.load(f"dataset/{name} - {version}/pics.npy")
+    heats = np.load(f"dataset/{name} - {version}/heats.npy")
+    clicks = np.load(f"dataset/{name} - {version}/clicks.npy")
     heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
     show_heatmap_preview_gui(heatmap)
 
