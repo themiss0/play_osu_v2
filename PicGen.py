@@ -86,6 +86,17 @@ def main():
         ),
     )
 
+    file_version = 1
+    version_path = dir + "/" + "pic_version.txt"
+    if os.path.exists(version_path):
+        with open(version_path, "r") as v:
+            try:
+                file_version = int(v.read()) + 1
+            except Exception:
+                pass
+    with open(version_path, "w") as v:
+        v.write(str(file_version))
+
 
 if __name__ == "__main__":
     main()

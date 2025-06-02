@@ -5,6 +5,9 @@ from OsuCoordMapper import OsuCoordMapper
 from osrparse import Replay
 import pickle
 
+# 每次更新heatgen的代码时，应该修改为不同的值
+VERSION = 1
+
 
 def heat_map_generator():
     heatmap_width = setting.heatmap_size[0]
@@ -14,6 +17,29 @@ def heat_map_generator():
         print("now:" + dir)
         try:
             if not os.path.isdir(dir):
+                continue
+
+            version_path = dir + "/" + "version.txt"
+
+            need_update = True
+            pic_version = 1
+            # 读图像版本
+            with open(dir + "/" + "pic_version.txt", "r") as v:
+                try:
+                    pic_version = int(v.read())
+                except Exception:
+                    continue
+            if os.path.exists(version_path):
+                with open(version_path, "r") as v:
+                    try:
+                        lines = v.readlines()
+                        file_version = int(lines[0].strip())
+                        my_pic_version = int(lines[1].strip())
+                        if VERSION == file_version and my_pic_version == pic_version:
+                            need_update = False
+                    except Exception:
+                        pass
+            if not need_update:
                 continue
 
             with open(dir + "/" + "rep.osr", "rb") as f:
@@ -127,6 +153,9 @@ def heat_map_generator():
         heatmaps = np.stack(heatmaps)
         np.save(dir + "/" + "clicks.npy", clicks)
         np.save(dir + "/" + "heats.npy", heatmaps)
+
+        with open(version_path, "w") as v:
+            v.writelines([str(VERSION) + "\n", str(pic_version) + "\n"])
 
 
 if __name__ == "__main__":
