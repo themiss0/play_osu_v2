@@ -6,11 +6,13 @@ import os
 
 
 def main():
-
-    # mem = MemReader()
-    # mem.update()
-    # heatmap_viewer(mem.song, mem.version)
-    heatmap_viewer()
+    mode = 0
+    if mode == 0:
+        mem = MemReader()
+        mem.update()
+        heatmap_viewer(mem.song, mem.version)
+    else:
+        heatmap_viewer()
 
 
 def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
@@ -74,36 +76,6 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
             interpolation=cv2.INTER_NEAREST,
         )
 
-        # 显示帧编号和状态
-        # frame_text = f"Frame: {frame_idx+1}/{len(heatmap_data)}"
-        # status_text = "[PAUSED]" if paused else f"[PLAYING at {fps} FPS]"
-        # cv2.putText(
-        #     display,
-        #     frame_text,
-        #     (10, 30),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     (255, 255, 255),
-        #     2,
-        # )
-        # cv2.putText(
-        #     display,
-        #     status_text,
-        #     (10, 70),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     1,
-        #     (255, 255, 255),
-        #     2,
-        # )
-        # cv2.putText(
-        #     display,
-        #     "Space:Play/Pause | B:Back | R:Reset | ESC:Quit",
-        #     (10, 110),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     0.7,
-        #     (255, 255, 255),
-        #     2,
-        # )
         cv2.putText(
             display,
             "click:" + str(click),
@@ -176,15 +148,19 @@ def heatmap_viewer(name=None, version=None):
         pics = np.load("history/pics.npy")
         heats = np.load("history/heats.npy")
         clicks = np.load("history/clicks.npy")
-        print(clicks.shape, clicks.max(), clicks.min())
         heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
         show_heatmap_preview_gui(heatmap)
         return
 
-    pics = np.load(f"dataset/{name} - {version}/pics.npy")
-    heats = np.load(f"dataset/{name} - {version}/heats.npy")
-    clicks = np.load(f"dataset/{name} - {version}/clicks.npy")
-    print(clicks.shape, clicks.max(), clicks.min())
+    def safe_path(name):
+        import re
+        return re.sub(r'[\\/:*?"<>|]', "", name)
+
+    dir = save_dir = f"dataset/{safe_path(name)} - {safe_path(version)}"
+
+    pics = np.load(f"{dir}/pics.npy")
+    heats = np.load(f"{dir}/heats.npy")
+    clicks = np.load(f"{dir}/clicks.npy")
     heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
     show_heatmap_preview_gui(heatmap)
 

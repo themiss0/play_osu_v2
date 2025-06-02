@@ -7,6 +7,14 @@ from MemReader import MemReader
 import numpy as np
 
 
+import re
+
+
+def safe_path(name):
+    # 替换为下划线或直接去掉非法字符
+    return re.sub(r'[\\/:*?"<>|]', "", name)
+
+
 def main():
     camera = Camera()
     mem = MemReader()
@@ -54,16 +62,29 @@ def main():
             print("waiting play")
 
     print("song over")
-    save_dir = f"dataset/{mem.song} - {mem.version}"
+    save_dir = f"dataset/{safe_path(mem.song)} - {safe_path(mem.version)}"
 
     pics_array = np.stack(pics)
     times_array = np.stack(times)
 
     # 保存
     os.makedirs(save_dir, exist_ok=True)  # exist_ok=True 避免目录已存在时报错
-    np.save(f"dataset/{mem.song} - {mem.version}/pics.npy", pics_array)
-    np.save(f"dataset/{mem.song} - {mem.version}/times.npy", times_array)
-    pickle.dump(meta, open(f"dataset/{mem.song} - {mem.version}/meta.pkl", "wb"))
+
+    np.save(
+        f"{save_dir}/pics.npy",
+        pics_array,
+    )
+    np.save(
+        f"{save_dir}/times.npy",
+        times_array,
+    )
+    pickle.dump(
+        meta,
+        open(
+            f"{save_dir}/meta.pkl",
+            "wb",
+        ),
+    )
 
 
 if __name__ == "__main__":
