@@ -65,60 +65,50 @@ def heat_map_generator():
 
         note_radius_normal = radius / (512 + 2 * radius), radius / (384 + 2 * radius)
 
-        ptr = 0
+        p = 0
         ptr_time = replay.replay_data[0].time_delta
 
         # click数据集
         for frame_time in times:
             click = 0
 
-            while ptr_time + 40 < frame_time:
-                ptr += 1
-                ptr_time += replay.replay_data[ptr].time_delta
+            while ptr_time + 10 < frame_time:
+                p += 1
+                ptr_time += replay.replay_data[p].time_delta
 
-            cursor_time = ptr_time
-
-            p = ptr
-            while p < len(replay.replay_data) and frame_time + 40 > cursor_time:
+            while p < len(replay.replay_data) and frame_time + 10 > ptr_time:
                 f = replay.replay_data[p]
 
                 is_click = f.keys > 0
 
                 if is_click:
-                    o = frame_time - cursor_time
-                    click = max(o / 40, click)
-                cursor_time += f.time_delta
+                    click = 1
+                    
+                ptr_time += f.time_delta
                 p += 1
 
             clicks.append(click)
 
-        ptr = 0
+        p = 0
         ptr_time = replay.replay_data[0].time_delta
 
-        #heat数据集
+        # heat数据集
         for frame_time in times:
             heatmap = np.zeros((heatmap_height, heatmap_width), dtype=np.float32)
 
             while ptr_time + 20 < frame_time:
-                ptr += 1
-                ptr_time += replay.replay_data[ptr].time_delta
+                ptr_time += replay.replay_data[p].time_delta
 
-            cursor_time = ptr_time
-            p = ptr
-            while (
-                p < len(replay.replay_data) - 1 and frame_time + preempt > cursor_time
-            ):
+            while p < len(replay.replay_data) - 1 and frame_time + preempt > ptr_time:
                 f = replay.replay_data[p]
                 nf = replay.replay_data[p + 1]
 
                 if f.keys == 0:
                     p += 1
-                    cursor_time += nf.time_delta
+                    ptr_time += nf.time_delta
                     continue
 
-                offset = (float(frame_time - cursor_time)) / (
-                    cursor_time + nf.time_delta
-                )
+                offset = (float(frame_time - ptr_time)) / (ptr_time + nf.time_delta)
 
                 x = int(f.x + (nf.x - f.x) * offset)
                 y = int(f.y + (nf.y - f.y) * offset)
@@ -134,7 +124,7 @@ def heat_map_generator():
                 ymin = max(ny - rh, 0)
                 ymax = min(ny + rh, heatmap_height)
 
-                weight = (preempt - abs(frame_time - cursor_time)) / preempt
+                weight = (preempt - abs(frame_time - ptr_time)) / preempt
                 for i in range(xmin, xmax):
                     for j in range(ymin, ymax):
                         dx = (i - nx) / rw
@@ -143,7 +133,7 @@ def heat_map_generator():
 
                         heatmap[j, i] = max(heatmap[j, i], g * weight)
                 p += 1
-                cursor_time += nf.time_delta
+                ptr_time += nf.time_delta
             heatmaps.append(heatmap)
 
         for i in range(len(clicks) - 1):
