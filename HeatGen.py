@@ -6,7 +6,7 @@ from osrparse import Replay
 import pickle
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 1
+VERSION = 2
 
 
 def heat_map_generator():
@@ -72,21 +72,21 @@ def heat_map_generator():
         for frame_time in times:
             click = 0
 
-            while ptr_time + 40 < frame_time:
+            while ptr_time + 10 < frame_time:
                 ptr += 1
                 ptr_time += replay.replay_data[ptr].time_delta
 
             cursor_time = ptr_time
 
             p = ptr
-            while p < len(replay.replay_data) and frame_time + 40 > cursor_time:
+            while p < len(replay.replay_data) and frame_time + 10 > cursor_time:
                 f = replay.replay_data[p]
 
                 is_click = f.keys > 0
 
                 if is_click:
-                    o = frame_time - cursor_time
-                    click = max(o / 40, click)
+                    click = 1
+                    break
                 cursor_time += f.time_delta
                 p += 1
 
@@ -145,13 +145,6 @@ def heat_map_generator():
                 p += 1
                 cursor_time += nf.time_delta
             heatmaps.append(heatmap)
-
-        for i in range(len(clicks) - 1):
-            if clicks[i] > 0.5:
-                if clicks[i + 1] > 0.5:
-                    clicks[i + 1] = 1
-                elif clicks[i + 1] == 0:
-                    clicks[i] = 1
 
         clicks = np.stack(clicks)
         heatmaps = np.stack(heatmaps)
