@@ -67,6 +67,8 @@ def heat_map_generator():
 
         ptr = 0
         ptr_time = replay.replay_data[0].time_delta
+
+        # click数据集
         for frame_time in times:
             click = 0
 
@@ -92,6 +94,8 @@ def heat_map_generator():
 
         ptr = 0
         ptr_time = replay.replay_data[0].time_delta
+
+        #heat数据集
         for frame_time in times:
             heatmap = np.zeros((heatmap_height, heatmap_width), dtype=np.float32)
 
