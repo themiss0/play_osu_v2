@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import time
 import cv2
 import torch.utils
@@ -25,10 +26,10 @@ net_version = 1
 input_len = 16
 hidden_size = 128
 status_len = 16
-EPOCHS = 5
+EPOCHS = 1
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch_directml.device()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch_directml.device()
 
 
 class Net(nn.Module):
@@ -77,7 +78,6 @@ class Net(nn.Module):
         )
 
     def forward(self, frames, status=[0.0 for i in range(status_len)]):
-        print(f"frames shape before cnn: {frames.shape}")
         B, T, C, H, W = frames.shape
         frames = frames.view(B * T, C, H, W)
         frames = torch.nn.functional.interpolate(
@@ -85,15 +85,11 @@ class Net(nn.Module):
         )  # (B, T, 1, 224, 224)
         frames = self.cnn(frames)
         frames = frames.view(B, T, -1)  # (B, T, 512)
-        print(f"frames shape after cnn: {frames.shape}")
         rnn_out, _ = self.rnn(frames)
         rnn_out = self.rnn_norm(rnn_out[:, -1])  # (B, hiddensize)
-        print(f"rnn_out shape: {rnn_out.shape}")
 
         heatmap_predict = self.heat_predict(rnn_out)
-        print(f"heatmap_predict shape: {heatmap_predict.shape}")
         click_predict = self.click_predict(rnn_out)
-        print(f"click_predict shape: {click_predict.shape}")
         return [heatmap_predict, click_predict]
 
 
@@ -165,7 +161,7 @@ def test(parameter_path):
     cam = Camera()
     mem = MemReader()
     net = Net().to(device)
-    net.load_state_dict(torch.load(parameter_path))
+    net.load_state_dict(torch.load(parameter_path, map_location="cpu"))
     joy = Controller(gw.getWindowsWithTitle(setting.window_name)[0])
     module_input = [
         torch.zeros(
@@ -176,6 +172,9 @@ def test(parameter_path):
         for _ in range(input_len)
     ]
 
+    pics = []
+    heatmaps = []
+    clicks = []
     net.eval()
 
     with torch.no_grad():
@@ -202,10 +201,8 @@ def test(parameter_path):
                 break
             if mem.time == last:
                 continue
-            print(f"mem time: {mem.time}")
             last = mem.time
 
-            start = time.time()
             pic = cam.get()
 
             if pic is None:
@@ -216,6 +213,7 @@ def test(parameter_path):
                 (setting.heatmap_size[0], setting.heatmap_size[1]),
                 interpolation=cv2.INTER_AREA,
             )
+            pics.append(pic)
             pic = torch.from_numpy(pic).float() / 255
 
             if len(module_input) < input_len:
@@ -225,20 +223,24 @@ def test(parameter_path):
 
             input = torch.stack(module_input).unsqueeze(1).unsqueeze(0).to(device)
             heat_predict, click_predict = net(input)
+            heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
+            clicks.append(click_predict.cpu().numpy())
 
             if click_predict > 0.5:
                 pos, _ = get_peak_position(heat_predict[0][0])
                 joy.move_to_game_pos(pos)
                 joy.hold()
-                print(f"click at {pos} at time{mem.time}")
             else:
                 joy.unhold()
-                print(
-                    f"click_predict {click_predict} too low, not click at time{mem.time}"
-                )
             mem.update()
         pass
     print("song over")
+    pics = np.stack(pics)
+    heatmaps = np.stack(heatmaps)
+    clicks = np.stack(clicks)
+    np.save(f"history/pics.npy", pics)
+    np.save(f"history/clicks.npy", clicks)
+    np.save(f"history/heats.npy", heatmaps)
 
 
 def get_peak_position(heatmap):
@@ -252,7 +254,7 @@ def get_peak_position(heatmap):
     heatmap = heatmap.cpu().numpy()
     h, w = heatmap.shape
     max_index = np.unravel_index(np.argmax(heatmap), heatmap.shape)
-    max_y, max_x = max_index  # 注意：行是y，列是x
+    max_y, max_x = max_index
 
     norm_x = max_x / w
     norm_y = max_y / h
@@ -261,5 +263,5 @@ def get_peak_position(heatmap):
 
 
 if __name__ == "__main__":
-    train(f"{setting.net_path}/heatmap_regression_net{net_version}.pth")
-    # test(f"{setting.net_path}/heatmap_regression_net{net_version}.pth")
+    # train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+    test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")

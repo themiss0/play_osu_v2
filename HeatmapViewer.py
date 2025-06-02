@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 from MemReader import MemReader
 import cv2
 import numpy as np
@@ -5,9 +6,11 @@ import os
 
 
 def main():
-    mem = MemReader()
-    mem.update()
-    heatmap_viewer(mem.song, mem.version)
+
+    # mem = MemReader()
+    # mem.update()
+    # heatmap_viewer(mem.song, mem.version)
+    heatmap_viewer()
 
 
 def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
@@ -168,10 +171,20 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
     cv2.destroyAllWindows()
 
 
-def heatmap_viewer(name, version):
+def heatmap_viewer(name=None, version=None):
+    if name == None:
+        pics = np.load("history/pics.npy")
+        heats = np.load("history/heats.npy")
+        clicks = np.load("history/clicks.npy")
+        print(clicks.shape, clicks.max(), clicks.min())
+        heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
+        show_heatmap_preview_gui(heatmap)
+        return
+
     pics = np.load(f"dataset/{name} - {version}/pics.npy")
     heats = np.load(f"dataset/{name} - {version}/heats.npy")
     clicks = np.load(f"dataset/{name} - {version}/clicks.npy")
+    print(clicks.shape, clicks.max(), clicks.min())
     heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
     show_heatmap_preview_gui(heatmap)
 
