@@ -5,12 +5,17 @@ import numpy as np
 import os
 
 
+def safe_path(name):
+    import re
+    # 替换为下划线或直接去掉非法字符
+    return re.sub(r'[\\/:*?"<>|]', "", name)
+
 def main():
     mode = 0 # 0为从当前游戏所指谱面，1为推理输出
     if mode == 0:
         mem = MemReader()
         mem.update()
-        heatmap_viewer(mem.song, mem.version)
+        heatmap_viewer(safe_path(mem.song), safe_path(mem.version))
     else:
         heatmap_viewer()
 
