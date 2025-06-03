@@ -23,13 +23,11 @@ import torch.nn as nn
 # 控制参数
 net_version = 2
 train_ecpoch = 1
-# TRAIN = False
-TRAIN = True
-
-# DATASET_PATH = (
-#     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
-# )
-DATASET_PATH = ""
+DATASET_PATH = (
+    f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
+)
+# 0：训练；1：在已有模型参数上训练；2：推理
+MODE = 2
 
 
 # 超参
@@ -230,9 +228,9 @@ def test(parameter_path):
             heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
             clicks.append(click_predict.cpu().numpy())
 
+            pos, _ = get_peak_position(heat_predict[0][0])
+            joy.move_to_game_pos(pos)
             if click_predict > 0.5:
-                pos, _ = get_peak_position(heat_predict[0][0])
-                joy.move_to_game_pos(pos)
                 joy.hold()
             else:
                 joy.unhold()
@@ -270,10 +268,9 @@ if __name__ == "__main__":
     # train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
     # train()
 
-    if TRAIN:
-        if DATASET_PATH == "":
-            train()
-        else:
-            train(DATASET_PATH)
-    else:
+    if MODE == 0:
+        train()
+    elif MODE == 1:
+        train(DATASET_PATH)
+    elif MODE == 2:
         test(DATASET_PATH)
