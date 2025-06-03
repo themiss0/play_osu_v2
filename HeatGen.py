@@ -4,9 +4,10 @@ import numpy as np
 from OsuCoordMapper import OsuCoordMapper
 from osrparse import Replay
 import pickle
+from tqdm import tqdm
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 2
+VERSION = 1
 
 
 def heat_map_generator():
@@ -69,15 +70,10 @@ def heat_map_generator():
         p_time = replay.replay_data[0].time_delta
 
         # click数据集
-        for frame_time in times:
+        for frame_time in tqdm(times, "Processing Clicks"):
             click = 0
 
-            while p_time + 10 < frame_time:
-                ptr += 1
-                p_time += replay.replay_data[ptr].time_delta
-
             time_now = p_time
-
             p_now = p
             while p_now < len(replay.replay_data) and frame_time + 10 > time_now:
                 f = replay.replay_data[p_now]
@@ -94,17 +90,19 @@ def heat_map_generator():
         p_time = replay.replay_data[0].time_delta
 
         # heat数据集
-        for frame_time in times:
+        for frame_time in tqdm(times, "Processing Heatmaps"):
             heatmap = np.zeros((heatmap_height, heatmap_width), dtype=np.float32)
 
-            while p_time + 20 < frame_time:
-                p_time += replay.replay_data[p].time_delta
+            while p_time + 20 < frame_time and p < len(replay.replay_data):
                 p += 1
+                p_time += replay.replay_data[p].time_delta
 
             p_now = p
             time_now = p_time
 
-            while p_now < len(replay.replay_data) - 1 and frame_time + preempt > p_time:
+            while (
+                p_now < len(replay.replay_data) - 1 and frame_time + preempt > time_now
+            ):
                 f = replay.replay_data[p_now]
                 nf = replay.replay_data[p_now + 1]
 
@@ -129,16 +127,25 @@ def heat_map_generator():
                 ymin = max(ny - rh, 0)
                 ymax = min(ny + rh, heatmap_height)
 
-                weight = (preempt - abs(frame_time - time_now)) / preempt
-                for i in range(xmin, xmax):
-                    for j in range(ymin, ymax):
-                        dx = (i - nx) / rw
-                        dy = (j - ny) / rh
-                        g = np.exp(-(dx**2 + dy**2) * 4)
+                weight = (
+                    preempt - abs(frame_time - time_now)
+                ) / preempt  # 时间偏移权重,
 
-                        heatmap[j, i] = max(heatmap[j, i], g * weight)
+                x_range = np.arange(xmin, xmax)
+                y_range = np.arange(ymin, ymax)
+                xx, yy = np.meshgrid(x_range, y_range)
+
+                dx = (xx - nx) / rw
+                dy = (yy - ny) / rh
+                g = np.exp(-(dx**2 + dy**2) * 4) * weight  # 位置偏移权重
+
+                heatmap[ymin:ymax, xmin:xmax] = np.maximum(
+                    heatmap[ymin:ymax, xmin:xmax], g
+                )
+
                 p_now += 1
                 time_now += nf.time_delta
+
             heatmaps.append(heatmap)
 
         clicks = np.stack(clicks)
