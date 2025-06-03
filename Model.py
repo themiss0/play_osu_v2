@@ -20,10 +20,23 @@ import torch
 import torch.nn as nn
 
 
+# 控制参数
+net_version = 2
+train_ecpoch = 1
+# TRAIN = False
+TRAIN = True
+
+# DATASET_PATH = (
+#     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
+# )
+DATASET_PATH = ""
+
+
 # 超参
-BATCH_SIZE = 32
-net_version = 1
+BATCH_SIZE = 128
 EPOCHS = 1
+# 在训练时click分支的loss权重会逐步增加，这是权重范围
+SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.1, 0.1]
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch_directml.device()
@@ -59,15 +72,13 @@ class Net(nn.Module):
             nn.Sigmoid(),
         )
         self.click_predict = torch.nn.Sequential(
-            torch.nn.Flatten(1, -1),
-            torch.nn.Linear(
-                int(128 * setting.heatmap_size[0] / 4 * setting.heatmap_size[1] / 4),
-                256,
-            ),
-            torch.nn.BatchNorm1d(256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, 1),
-            torch.nn.Sigmoid(),
+            nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
+            nn.Flatten(),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, frames):
@@ -80,17 +91,27 @@ class Net(nn.Module):
 
 # === 多任务损失 ===
 class MultiTaskLoss(nn.Module):
-    def __init__(self, heat_weight=1.0, click_weight=1.0):
+    def __init__(self, batchsize=BATCH_SIZE, epochs=EPOCHS):
         super().__init__()
         self.heat_loss = nn.MSELoss()
         self.click_loss = nn.BCELoss()
-        self.heat_weight = heat_weight
-        self.click_weight = click_weight
+        self.heat_weight = SMOOTH_MULTI_LOSS_WEIGHT_RANGE[1]
+        self.click_weight = SMOOTH_MULTI_LOSS_WEIGHT_RANGE[0]
+        self.weight_sub = self.heat_weight - self.click_weight
+        self.total_batch_size = batchsize * epochs
 
     def forward(self, heat_pred, heat_gt, click_pred, click_gt):
-        loss1 = self.heat_loss(heat_pred, heat_gt)
-        loss2 = self.click_loss(click_pred.squeeze(), click_gt.squeeze())
-        return self.heat_weight * loss1 + self.click_weight * loss2
+        loss1 = self.heat_loss(heat_pred, heat_gt) * self.heat_weight
+        loss2 = (
+            self.click_loss(click_pred.squeeze(), click_gt.squeeze())
+            * self.click_weight
+        )
+
+        weight_offset = self.weight_sub * 1 / self.total_batch_size
+        self.click_weight -= weight_offset
+        self.heat_weight += weight_offset
+
+        return loss1 + loss2
 
 
 def train(parameter_path=None):
@@ -248,4 +269,11 @@ def get_peak_position(heatmap):
 if __name__ == "__main__":
     # train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
     # train()
-    test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+
+    if TRAIN:
+        if DATASET_PATH == "":
+            train()
+        else:
+            train(DATASET_PATH)
+    else:
+        test(DATASET_PATH)
