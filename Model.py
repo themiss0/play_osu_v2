@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import time
 import cv2
@@ -20,7 +21,7 @@ import torch.nn as nn
 
 
 # 超参
-batch_size = 32
+BATCH_SIZE = 32
 net_version = 1
 EPOCHS = 1
 
@@ -60,7 +61,8 @@ class Net(nn.Module):
         self.click_predict = torch.nn.Sequential(
             torch.nn.Flatten(1, -1),
             torch.nn.Linear(
-                int(128 * setting.heatmap_size[0] / 4 * setting.heatmap_size[1] / 4), 256
+                int(128 * setting.heatmap_size[0] / 4 * setting.heatmap_size[1] / 4),
+                256,
             ),
             torch.nn.BatchNorm1d(256),
             torch.nn.ReLU(),
@@ -106,9 +108,19 @@ def train(parameter_path=None):
 
     # 创建数据集列表并压缩为单个loader
     map_sets = []
-    map_sets.append(MyDataSet("Zeke and Luther Theme Song (TV Size) - Smoke's Insane"))
+    for dir in os.listdir(setting.dataset_path):
+        dir = setting.dataset_path + "/" + dir
+        try:
+            if not os.path.isdir(dir):
+                continue
+            if os.path.exists(dir + "/heats.npy"):
+                map_sets.append(MyDataSet(dir))
 
-    loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=batch_size)
+        except Exception as e:
+            continue
+
+    loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=BATCH_SIZE)
+    print("dataset size: " + str(len(loader) * BATCH_SIZE))
 
     net.train()
     for epoch in range(EPOCHS):
@@ -234,5 +246,6 @@ def get_peak_position(heatmap):
 
 
 if __name__ == "__main__":
-    train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
-    # test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+    # train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+    # train()
+    test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")

@@ -11,7 +11,7 @@ def safe_path(name):
     return re.sub(r'[\\/:*?"<>|]', "", name)
 
 def main():
-    mode = 0 # 0为从当前游戏所指谱面，1为推理输出
+    mode = 1 # 0为从当前游戏所指谱面，1为推理输出
     if mode == 0:
         mem = MemReader()
         mem.update()
