@@ -71,6 +71,11 @@ def heat_map_generator():
 
         # click数据集
         for frame_time in tqdm(times, "Processing Clicks"):
+
+            while p_time + 10 < frame_time and p < len(replay.replay_data):
+                p += 1
+                p_time += replay.replay_data[p].time_delta
+
             click = 0
 
             time_now = p_time
