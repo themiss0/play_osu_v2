@@ -12,20 +12,16 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data import ConcatDataset
-from MyDataSet import MyDataSet
+from CnnDataSet import MyDataSet
 import setting
 from Camera import Camera
 import torch
 import torch.nn as nn
-import torchvision
 
 
 # 超参
 batch_size = 32
 net_version = 1
-input_len = 16
-hidden_size = 128
-status_len = 16
 EPOCHS = 1
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,60 +32,47 @@ class Net(nn.Module):
 
     def __init__(self):
         super().__init__()
-        height, weight = setting.heatmap_size
-        self.cnn = torchvision.models.resnet18(
-            torchvision.models.ResNet18_Weights.DEFAULT
+        # (B, 1, H, W)
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),  # (B, 32, H, W)
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # (B, 64, H, W)
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # downsample (B, 64, H/2, W/2)
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),  # (B, 128, H/2, W/2)
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # downsample (B, 128, H/4, W/4)
         )
-        self.cnn.conv1 = torch.nn.Conv2d(
-            1,
-            64,
-            kernel_size=(7, 7),
-            stride=(2, 2),
-            padding=(3, 3),
-            bias=False,
-        )
-        self.cnn.fc = torch.nn.Identity()
-        self.rnn = torch.nn.RNN(
-            512,
-            hidden_size,
-            batch_first=True,
-        )
-        self.rnn_norm = torch.nn.LayerNorm((128))
+
         self.heat_predict = nn.Sequential(
-            nn.Linear(hidden_size, 4 * 18 * 24),
+            nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Unflatten(-1, (4, 18, 24)),
-            nn.ConvTranspose2d(4, 16, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(8, 1, kernel_size=3, padding=1),
+            nn.Conv2d(32, 1, kernel_size=1),
             nn.Sigmoid(),
         )
         self.click_predict = torch.nn.Sequential(
-            torch.nn.Linear(hidden_size, 256),
+            torch.nn.Flatten(1, -1),
+            torch.nn.Linear(
+                int(128 * setting.heatmap_size[0] / 4 * setting.heatmap_size[1] / 4), 256
+            ),
             torch.nn.BatchNorm1d(256),
             torch.nn.ReLU(),
-            torch.nn.Linear(256, 128),
-            torch.nn.BatchNorm1d(128),
-            torch.nn.ReLU(),
-            torch.nn.Linear(128, 1),
+            torch.nn.Linear(256, 1),
             torch.nn.Sigmoid(),
         )
 
-    def forward(self, frames, status=[0.0 for i in range(status_len)]):
-        B, T, C, H, W = frames.shape
-        frames = frames.view(B * T, C, H, W)
-        frames = torch.nn.functional.interpolate(
-            frames, size=(224, 224), mode="bilinear", align_corners=False
-        )  # (B, T, 1, 224, 224)
+    def forward(self, frames):
         frames = self.cnn(frames)
-        frames = frames.view(B, T, -1)  # (B, T, 512)
-        rnn_out, _ = self.rnn(frames)
-        rnn_out = self.rnn_norm(rnn_out[:, -1])  # (B, hiddensize)
 
-        heatmap_predict = self.heat_predict(rnn_out)
-        click_predict = self.click_predict(rnn_out)
+        heatmap_predict = self.heat_predict(frames)
+        click_predict = self.click_predict(frames)
         return [heatmap_predict, click_predict]
 
 
@@ -140,7 +123,7 @@ def train(parameter_path=None):
 
             heat_predict, click_predict = net(pic)
 
-            loss = mtloss(heat_predict, heat[:, -1], click_predict, click[:, -1])
+            loss = mtloss(heat_predict, heat, click_predict, click)
             loss.backward()
             optimizer.step()
 
@@ -163,14 +146,6 @@ def test(parameter_path):
     net = Net().to(device)
     net.load_state_dict(torch.load(parameter_path, map_location="cpu"))
     joy = Controller(gw.getWindowsWithTitle(setting.window_name)[0])
-    module_input = [
-        torch.zeros(
-            setting.heatmap_size[1],
-            setting.heatmap_size[0],
-            dtype=torch.float32,
-        )
-        for _ in range(input_len)
-    ]
 
     pics = []
     heatmaps = []
@@ -216,13 +191,9 @@ def test(parameter_path):
             pics.append(pic)
             pic = torch.from_numpy(pic).float() / 255
 
-            if len(module_input) < input_len:
-                continue
-            module_input.pop(0)
-            module_input.append(pic)
-
-            input = torch.stack(module_input).unsqueeze(1).unsqueeze(0).to(device)
+            input = pic.unsqueeze(0).unsqueeze(0).to(device)
             heat_predict, click_predict = net(input)
+
             heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
             clicks.append(click_predict.cpu().numpy())
 
@@ -263,5 +234,5 @@ def get_peak_position(heatmap):
 
 
 if __name__ == "__main__":
-    # train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
-    test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+    train(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")
+    # test(f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth")

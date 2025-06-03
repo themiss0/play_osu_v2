@@ -6,7 +6,7 @@ from osrparse import Replay
 import pickle
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 1
+VERSION = 2
 
 
 def heat_map_generator():
@@ -95,7 +95,7 @@ def heat_map_generator():
         ptr = 0
         ptr_time = replay.replay_data[0].time_delta
 
-        #heat数据集
+        # heat数据集
         for frame_time in times:
             heatmap = np.zeros((heatmap_height, heatmap_width), dtype=np.float32)
 
