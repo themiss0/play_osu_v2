@@ -92,7 +92,7 @@ class MemReader:
             self.start = js["beatmap"]["time"]["firstObject"]
             self.end = js["beatmap"]["time"]["lastObject"]
             self.status = js["state"]["name"]
-            self.song = js["beatmap"]["titleUnicode"]
+            self.song = js["beatmap"]["title"]
             self.version = js["beatmap"]["version"]
 
         except KeyError as e:
