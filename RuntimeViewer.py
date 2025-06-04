@@ -1,3 +1,4 @@
+import setting
 import cv2
 import numpy as np
 
@@ -38,7 +39,10 @@ class RuntimeViewer:
             len(self.COLORMAPS) - 1,
             lambda x: None,
         )
-        cv2.imshow("Heatmap Preview", np.zeros((100, 100, 3), dtype=np.uint8))
+        self.update_frame(
+            np.zeros(setting.heatmap_size, dtype=np.uint8),
+            np.zeros(setting.heatmap_size, dtype=np.uint8),
+        )
 
     def update_frame(self, gray_img, heatmap, click=0):
         """

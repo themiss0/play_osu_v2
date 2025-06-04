@@ -21,19 +21,19 @@ import torch.nn as nn
 from RuntimeViewer import RuntimeViewer
 
 
+# 0：训练；1：在已有模型参数上训练；2：推理
+MODE = 2
+
 # 控制参数
 net_version = 2
-train_ecpoch = 5
+train_ecpoch = 4
 DATASET_PATH = (
     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
 )
-# 0：训练；1：在已有模型参数上训练；2：推理
-MODE = 0
-
 
 # 超参
+EPOCHS = 5
 BATCH_SIZE = 128
-EPOCHS = 1
 # 在训练时click分支的loss权重会逐步增加，这是权重范围
 SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.0, 0.0]
 
@@ -86,7 +86,7 @@ class Net(nn.Module):
         heatmap_predict = self.heat_predict(frames)
         # 暂时砍掉了click分支
         # click_predict = self.click_predict(frames)
-        return [heatmap_predict, 1]
+        return [heatmap_predict, torch.zeros(heatmap_predict.shape[0])]
 
 
 # === 多任务损失 ===
@@ -171,12 +171,14 @@ def train(parameter_path=None):
 
         print(f"Epoch {epoch+1} finished. Average loss: {total_loss/len(loader):.6f}")
 
-    # 保存训练好的权重
-    torch.save(
-        net.state_dict(),
-        f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS +net_version}.pth",
-    )
-    print(f"Model saved to heatmap_regression_net{net_version}_{EPOCHS}.pth")
+        # 保存训练好的权重，每训练一轮保存一次
+        torch.save(
+            net.state_dict(),
+            f"{setting.net_path}/heatmap_regression_net{net_version}_{epoch +train_ecpoch}.pth",
+        )
+        print(
+            f"Model saved to heatmap_regression_net{net_version}_{epoch + train_ecpoch}.pth"
+        )
 
 
 def test(parameter_path):
@@ -208,7 +210,7 @@ def test(parameter_path):
         while last <= mem.time:
             mem.update()
 
-        while mem.status == "play" and mem.time < mem.end:
+        while mem.status == "play" or mem.time < mem.end:
             mem.update()
 
             if mem.time > mem.end:
