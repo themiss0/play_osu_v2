@@ -23,12 +23,12 @@ from RuntimeViewer import RuntimeViewer
 
 # 控制参数
 net_version = 2
-train_ecpoch = 1
+train_ecpoch = 5
 DATASET_PATH = (
     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
 )
 # 0：训练；1：在已有模型参数上训练；2：推理
-MODE = 2
+MODE = 0
 
 
 # 超参
@@ -102,22 +102,23 @@ class MultiTaskLoss(nn.Module):
 
     def forward(self, heat_pred, heat_gt, click_pred, click_gt):
         loss1 = self.heat_loss(heat_pred, heat_gt) * self.heat_weight
-        loss2 = (
-            self.click_loss(click_pred.squeeze(), click_gt.squeeze())
-            * self.click_weight
-        )
 
-        weight_offset = self.weight_sub * 1 / self.total_batch_size
-        self.click_weight -= weight_offset
-        self.heat_weight += weight_offset
+        return loss1
+        # loss2 = (
+        #     self.click_loss(click_pred.squeeze(), click_gt.squeeze())
+        #     * self.click_weight
+        # )
 
-        return loss1 + loss2
+        # weight_offset = self.weight_sub * 1 / self.total_batch_size
+        # self.click_weight -= weight_offset
+        # self.heat_weight += weight_offset
+
+        # return loss1 + loss2
 
 
 def train(parameter_path=None):
 
     net = Net().to(device)
-    runtimeViewer = RuntimeViewer()
     if parameter_path is not None:
         try:
             net.load_state_dict(torch.load(parameter_path), weights_only=True)
@@ -136,6 +137,10 @@ def train(parameter_path=None):
             if not os.path.isdir(dir):
                 continue
             if os.path.exists(dir + "/heats.npy"):
+                _ = MyDataSet(dir)
+                if len(_) < 1:
+                    print(f"Dataset {dir} is empty, skipping.")
+                    continue
                 map_sets.append(MyDataSet(dir))
 
         except Exception as e:
@@ -169,7 +174,7 @@ def train(parameter_path=None):
     # 保存训练好的权重
     torch.save(
         net.state_dict(),
-        f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS}.pth",
+        f"{setting.net_path}/heatmap_regression_net{net_version}_{EPOCHS +net_version}.pth",
     )
     print(f"Model saved to heatmap_regression_net{net_version}_{EPOCHS}.pth")
 
