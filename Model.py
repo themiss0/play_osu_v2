@@ -18,6 +18,7 @@ import setting
 from Camera import Camera
 import torch
 import torch.nn as nn
+from RuntimeViewer import RuntimeViewer
 
 
 # 控制参数
@@ -34,7 +35,7 @@ MODE = 2
 BATCH_SIZE = 128
 EPOCHS = 1
 # 在训练时click分支的loss权重会逐步增加，这是权重范围
-SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.1, 0.1]
+SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.0, 0.0]
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch_directml.device()
@@ -83,8 +84,9 @@ class Net(nn.Module):
         frames = self.cnn(frames)
 
         heatmap_predict = self.heat_predict(frames)
-        click_predict = self.click_predict(frames)
-        return [heatmap_predict, click_predict]
+        # 暂时砍掉了click分支
+        # click_predict = self.click_predict(frames)
+        return [heatmap_predict, 1]
 
 
 # === 多任务损失 ===
@@ -93,7 +95,7 @@ class MultiTaskLoss(nn.Module):
         super().__init__()
         self.heat_loss = nn.MSELoss()
         self.click_loss = nn.BCELoss()
-        self.heat_weight = SMOOTH_MULTI_LOSS_WEIGHT_RANGE[1]
+        self.heat_weight = 1 - SMOOTH_MULTI_LOSS_WEIGHT_RANGE[0]
         self.click_weight = SMOOTH_MULTI_LOSS_WEIGHT_RANGE[0]
         self.weight_sub = self.heat_weight - self.click_weight
         self.total_batch_size = batchsize * epochs
@@ -115,6 +117,7 @@ class MultiTaskLoss(nn.Module):
 def train(parameter_path=None):
 
     net = Net().to(device)
+    runtimeViewer = RuntimeViewer()
     if parameter_path is not None:
         try:
             net.load_state_dict(torch.load(parameter_path), weights_only=True)
@@ -182,6 +185,7 @@ def test(parameter_path):
     heatmaps = []
     clicks = []
     net.eval()
+    runtimeViewer = RuntimeViewer()
 
     with torch.no_grad():
         while True:
@@ -199,7 +203,7 @@ def test(parameter_path):
         while last <= mem.time:
             mem.update()
 
-        while mem.status == "play":
+        while mem.status == "play" and mem.time < mem.end:
             mem.update()
 
             if mem.time > mem.end:
@@ -227,6 +231,7 @@ def test(parameter_path):
 
             heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
             clicks.append(click_predict.cpu().numpy())
+            runtimeViewer.update_frame(pics[-1], heatmaps[-1], clicks[-1])
 
             pos, _ = get_peak_position(heat_predict[0][0])
             joy.move_to_game_pos(pos)
