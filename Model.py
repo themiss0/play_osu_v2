@@ -22,11 +22,11 @@ from RuntimeViewer import RuntimeViewer
 
 
 # 0：训练；1：在已有模型参数上训练；2：推理
-MODE = 2
+MODE = 0
 
 # 控制参数
-net_version = 2
-train_ecpoch = 4
+net_version = 3
+train_ecpoch = 0
 DATASET_PATH = (
     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
 )
@@ -46,30 +46,52 @@ class Net(nn.Module):
     def __init__(self):
         super().__init__()
         # (B, 1, H, W)
-        self.cnn = nn.Sequential(
+
+        self.conv1 = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),  # (B, 32, H, W)
             nn.BatchNorm2d(32),
             nn.ReLU(),
+        )
+        self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, padding=1),  # (B, 64, H, W)
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # downsample (B, 64, H/2, W/2)
+        )
+        self.pool1 = nn.MaxPool2d(2)  # (B, 64, H/2, W/2)
+
+        self.conv3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3, padding=1),  # (B, 128, H/2, W/2)
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # downsample (B, 128, H/4, W/4)
         )
 
-        self.heat_predict = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2),
+        self.pool2 = nn.MaxPool2d(2)  # (B, 128, H/4, W/4)
+
+        # heat decode
+        self.up1 = nn.ConvTranspose2d(
+            128, 128, kernel_size=2, stride=2  # (B, 128, H/2, W/2)
+        )
+
+        self.conv_up1 = nn.Sequential(
+            nn.Conv2d(256, 64, kernel_size=3, padding=1),  # (B, 64, H/2, W/2)
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
+        )
+
+        self.up2 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2)  # (B, 64, H, W)
+
+        self.conv_up2 = nn.Sequential(
+            nn.Conv2d(128, 32, kernel_size=3, padding=1),  #
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 1, kernel_size=1),
+        )  # (B, 32, H, W)
+
+        self.heat_predict = nn.Sequential(
+            nn.Conv2d(32, 1, kernel_size=3, padding=1),
             nn.Sigmoid(),
-        )
+        )  # (B, 1, H, W)
+
+        # click decode
         self.click_predict = torch.nn.Sequential(
             nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
             nn.Flatten(),
@@ -81,9 +103,21 @@ class Net(nn.Module):
         )
 
     def forward(self, frames):
-        frames = self.cnn(frames)
+        x1 = self.conv1(frames)  # (B, 32, H, W)
+        x2 = self.conv2(x1)  # (B, 64, H, W)
+        x3 = self.pool1(x2)  # (B, 64, H/2, W/2)
+        x4 = self.conv3(x3)  # (B, 128, H/2, W/2)
+        x5 = self.pool2(x4)  # (B, 128, H/4, W/4)
 
-        heatmap_predict = self.heat_predict(frames)
+        u1 = self.up1(x5)  # (B, 128, H/2, W/2)
+        u1 = torch.cat((u1, x4), dim=1)  # (B, 256, H/2, W/2)
+        u2 = self.conv_up1(u1)  # (B, 64, H/2, W/2)
+        u3 = self.up2(u2)  # (B, 32, H, W)
+        u3 = torch.cat((u3, x2), dim=1)  # (B, 96, H, W)
+        u4 = self.conv_up2(u3)  # (B, 32, H, W)
+
+        heatmap_predict = self.heat_predict(u4)
+
         # 暂时砍掉了click分支
         # click_predict = self.click_predict(frames)
         return [heatmap_predict, torch.zeros(heatmap_predict.shape[0])]
