@@ -3,11 +3,8 @@ import matplotlib.pyplot as plt
 import time
 import cv2
 import torch.utils
-from Controller import Controller
-import pygetwindow as gw
-from MemReader import MemReader
+import torch.utils.data
 import torch
-import torch_directml
 import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
@@ -15,11 +12,25 @@ from torch.utils.data import DataLoader
 from torch.utils.data import ConcatDataset
 from CnnDataSet import MyDataSet
 import setting
-from Camera import Camera
 import torch
 import torch.nn as nn
-from RuntimeViewer import RuntimeViewer
 
+# 云上训练不需要的
+
+import pygetwindow as gw
+from RuntimeViewer import RuntimeViewer
+from Controller import Controller
+from Camera import Camera
+from MemReader import MemReader
+
+
+device = None
+try:
+    import torch_directml
+
+    device = torch_directml.device()
+except Exception as e:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 0：训练；1：在已有模型参数上训练；2：推理
 MODE = 0
@@ -33,12 +44,9 @@ DATASET_PATH = (
 
 # 超参
 EPOCHS = 5
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 # 在训练时click分支的loss权重会逐步增加，这是权重范围
 SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.0, 0.0]
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch_directml.device()
 
 
 class Net(nn.Module):
@@ -180,13 +188,24 @@ def train(parameter_path=None):
         except Exception as e:
             continue
 
-    loader = DataLoader(ConcatDataset(map_sets), shuffle=True, batch_size=BATCH_SIZE)
-    print("dataset size: " + str(len(loader) * BATCH_SIZE))
+    concat = ConcatDataset(map_sets)
+    test_ratio = 0.2
+    test_set, train_set = torch.utils.data.random_split(
+        concat,
+        [int(len(concat) * test_ratio), len(concat) - int(len(concat) * test_ratio)],
+    )
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=BATCH_SIZE)
+    test_loader = DataLoader(test_set, shuffle=True, batch_size=BATCH_SIZE)
 
-    net.train()
+    print("dataset size: " + str(len(train_loader) * BATCH_SIZE))
+
+    avg_train_losses = []
+    avg_test_losses = []
+
     for epoch in range(EPOCHS):
+        net.train()
         total_loss = 0
-        pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
 
         for heat, pic, click in pbar:
             heat = heat.to(device)
@@ -203,7 +222,38 @@ def train(parameter_path=None):
             total_loss += loss.item()
             pbar.set_postfix({"loss": loss.item()})
 
-        print(f"Epoch {epoch+1} finished. Average loss: {total_loss/len(loader):.6f}")
+        print(
+            f"Epoch {epoch+1} finished. Average loss: {total_loss/len(train_loader):.6f}"
+        )
+
+        # 推理测试集并记录损失
+        net.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for heat, pic, click in test_loader:
+                heat = heat.to(device)
+                pic = pic.to(device)
+                click = click.to(device)
+                heat_predict, click_predict = net(pic)
+                loss = mtloss(heat_predict, heat, click_predict, click)
+                test_loss += loss.item()
+        avg_test_loss = test_loss / len(test_loader)
+        print(f"Test loss: {avg_test_loss:.6f}")
+
+        avg_train_losses.append(total_loss / len(train_loader))
+        avg_test_losses.append(avg_test_loss)
+
+        # 绘制损失曲线
+        plt.figure(figsize=(8, 5))
+        plt.plot(avg_train_losses, label="Train Loss")
+        plt.plot(avg_test_losses, label="Test Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Training and Test Loss")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+        plt.close()
 
         # 保存训练好的权重，每训练一轮保存一次
         torch.save(

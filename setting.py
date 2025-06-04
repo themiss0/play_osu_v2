@@ -1,7 +1,5 @@
-import pyautogui
-
 # envirment setting
-monitor_size = pyautogui.size()
+monitor_size = [2560, 1440]
 
 # tosu setting
 url = "http://127.0.0.1:24050/json/v2"
@@ -13,6 +11,6 @@ left_click = "z"
 right_click = "x"
 window_name = "osu!"
 play_filed = [185, 59, 830, 648]  # 游戏区域范围，用box_detect得到, x, y, w, h
-dataset_path = "dataset"
+dataset_path = "../data/dataset"
 heatmap_size = (96, 72)
 net_path = "net"
