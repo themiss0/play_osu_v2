@@ -126,10 +126,9 @@ class Net(nn.Module):
         u4 = self.conv_up2(u3)  # (B, 32, H, W)
 
         heatmap_predict = self.heat_predict(u4)
-
-        # 暂时砍掉了click分支
-        # click_predict = self.click_predict(frames)
-        return [heatmap_predict, torch.zeros(heatmap_predict.shape[0])]
+        click_predict = self.click_predict(x5)
+        
+        return [heatmap_predict, click_predict]
 
 
 # === 多任务损失 ===

@@ -88,6 +88,8 @@ def heat_map_generator():
                     click = 0.6 if click_frame_cnt > 3 else 1.0
                     click_frame_cnt += 1
                     break
+                else:
+                    click_frame_cnt = 0
                 time_now += f.time_delta
                 p_now += 1
 
