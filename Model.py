@@ -1,3 +1,4 @@
+# %%
 import os
 import matplotlib.pyplot as plt
 import time
@@ -33,17 +34,17 @@ except Exception as e:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 0：训练；1：在已有模型参数上训练；2：推理
-MODE = 0
+MODE = 2
 
 # 控制参数
 net_version = 3
-train_ecpoch = 0
+train_ecpoch = 14
 DATASET_PATH = (
     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
 )
 
 # 超参
-EPOCHS = 5
+EPOCHS = 30
 BATCH_SIZE = 512
 # 在训练时click分支的loss权重会逐步增加，这是权重范围
 SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.0, 0.0]
@@ -166,7 +167,7 @@ def train(parameter_path=None):
             net.load_state_dict(torch.load(parameter_path), weights_only=True)
         except:
             print("can't find dataset_parameter")
-            exit
+            exit()
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-4)
     mtloss = MultiTaskLoss().to(device)
@@ -245,8 +246,8 @@ def train(parameter_path=None):
 
         # 绘制损失曲线
         plt.figure(figsize=(8, 5))
-        plt.plot(avg_train_losses, label="Train Loss")
-        plt.plot(avg_test_losses, label="Test Loss")
+        plt.plot(avg_train_losses, "-o", label="Train Loss")
+        plt.plot(avg_test_losses, "-o", label="Test Loss")
         plt.xlabel("Epoch")
         plt.ylabel("Loss")
         plt.title("Training and Test Loss")
@@ -258,10 +259,10 @@ def train(parameter_path=None):
         # 保存训练好的权重，每训练一轮保存一次
         torch.save(
             net.state_dict(),
-            f"{setting.net_path}/heatmap_regression_net{net_version}_{epoch +train_ecpoch}.pth",
+            f"{setting.net_path}/heatmap_regression_net{net_version}_{epoch +train_ecpoch + 1}.pth",
         )
         print(
-            f"Model saved to heatmap_regression_net{net_version}_{epoch + train_ecpoch}.pth"
+            f"Model saved to heatmap_regression_net{net_version}_{epoch + train_ecpoch + 1}.pth"
         )
 
 
