@@ -13,7 +13,6 @@ class Camera:
         self.cam = dxcam.create(output_color="BGR", max_buffer_len=10)
         self.ww = cast(gw.Win32Window, gw.getWindowsWithTitle(setting.window_name)[0])
         # 修改窗口
-        self.ww.activate()
         self.ww.resizeTo(
             setting.window_resize[0],
             setting.window_resize[1],

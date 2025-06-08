@@ -15,12 +15,11 @@ from MemReader import MemReader
 import torch_directml
 
 
-# 0：训练；1：在已有模型参数上训练；2：推理
-MODE = 2
-
 # 控制参数
-heat_net_version = 4
-heat_net_train_ecpoch = 0
+close_heat_net = False
+close_click_net = True
+heat_net_version = 5
+heat_net_train_ecpoch = 20
 
 click_net_version = 0
 click_net_train_ecpoch = 0
@@ -40,9 +39,11 @@ def test(heat_net_path, click_net_path):
     cam = Camera()
     mem = MemReader()
     heat_net = HeatNet().to(device)
-    click_net = ClickNet.to(device)
-    heat_net.load_state_dict(torch.load(heat_net_path, map_location="cpu"))
-    click_net.load_state_dict(torch.load(click_net_path, map_location="cpu"))
+    click_net = ClickNet().to(device)
+    if not close_heat_net:
+        heat_net.load_state_dict(torch.load(heat_net_path, map_location="cpu"))
+    if not close_click_net:
+        click_net.load_state_dict(torch.load(click_net_path, map_location="cpu"))
 
     joy = Controller(gw.getWindowsWithTitle(setting.window_name)[0])
 
@@ -51,6 +52,7 @@ def test(heat_net_path, click_net_path):
     clicks = []
     holds = []
     heat_net.eval()
+    click_net.eval()
     runtimeViewer = RuntimeViewer()
 
     with torch.no_grad():
@@ -104,14 +106,15 @@ def test(heat_net_path, click_net_path):
             pos, _ = get_peak_position(heat_predict[0][0])
             joy.move_to_game_pos(pos)
             click_now = False
-            if not click_now:
-                if click_predict > 0.5:
-                    joy.hold()
-                    click_now = True
-            else:
-                if click_now:
-                    if hold_predict < 0.5:
-                        joy.unhold()
+            if not close_click_net:
+                if not click_now:
+                    if click_predict > 0.5:
+                        joy.hold()
+                        click_now = True
+                else:
+                    if click_now:
+                        if hold_predict < 0.5:
+                            joy.unhold()
             mem.update()
         pass
     print("song over")

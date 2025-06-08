@@ -40,6 +40,8 @@ class ClickNet(nn.Module):
     def __init__(self):
         super().__init__()
         # (B, 1, H, W)
+        h = 72
+        w = 96
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),  # (B, 32, H, W)
@@ -61,18 +63,18 @@ class ClickNet(nn.Module):
 
         self.pool2 = nn.MaxPool2d(2)  # (B, 128, H/4, W/4)
 
-        self.backbone = nn.Sequential(
+        self.backbone = nn.Sequential()
+
+        # click decode
+        self.click_predict = torch.nn.Sequential(
             self.conv1,
             self.conv2,
             self.pool1,
             # self.conv3,
             # self.pool2,
             nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
-        )
-
-        # click decode
-        self.click_predict = torch.nn.Sequential(
-            nn.Linear(128, 256),
+            nn.Flatten(),
+            nn.Linear(64, 256),
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, 1),
@@ -80,7 +82,14 @@ class ClickNet(nn.Module):
         )
         # hold decode
         self.hold_predict = torch.nn.Sequential(
-            nn.Linear(128, 256),
+            self.conv1,
+            self.conv2,
+            self.pool1,
+            # self.conv3,
+            # self.pool2,
+            nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
+            nn.Flatten(),
+            nn.Linear(64, 256),
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Linear(256, 1),
@@ -88,10 +97,8 @@ class ClickNet(nn.Module):
         )
 
     def forward(self, frames):
-        main_out = self.backbone(frames)
-
-        click_predict = self.click_predict(main_out).squeeze(-1)
-        hold_predict = self.hold_predict(main_out).squeeze(-1)
+        click_predict = self.click_predict(frames).squeeze(-1)
+        hold_predict = self.hold_predict(frames).squeeze(-1)
 
         return [click_predict, hold_predict]
 
@@ -105,10 +112,10 @@ class MultiTaskLoss(nn.Module):
         self.total_batch_size = batchsize * epochs
 
     def forward(self, epoch, click_pred, click_gt, hold_pred, hold_gt):
-        loss2 = self.click_loss(click_pred, click_gt)
-        loss3 = self.hold_loss(hold_pred, hold_gt)
+        click_loss = self.click_loss(click_pred, click_gt)
+        hold_loss = self.hold_loss(hold_pred, hold_gt)
 
-        return loss2 * 0.5 + loss3 * 0.5
+        return click_loss * 0.5 + hold_loss * 0.5
 
 
 def train(parameter_path=None):
@@ -138,7 +145,7 @@ def train(parameter_path=None):
                     continue
                 map_sets.append(MyDataSet(dir))
                 # 代码测试仅使用一个
-                # break
+                break
 
         except Exception as e:
             print("error in map " + dir + str(e))
