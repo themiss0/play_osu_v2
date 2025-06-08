@@ -7,7 +7,7 @@ import pickle
 from tqdm import tqdm
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 2
+VERSION = 3
 
 
 def heat_map_generator():
@@ -66,53 +66,53 @@ def heat_map_generator():
         preempt = mapper.get_preempt_time(ar)
 
         note_radius_normal = radius / (512 + 2 * radius), radius / (384 + 2 * radius)
-
         click_pro = []
         hold_pro = []
-
-        # 此段为提取回放中的点击，分开为click和hold；p为临时变量作为指针，
-        p = 0
         click_frame_cnt = 0
+
+        # === Step 1: 生成 click_pro 和 hold_pro ===
         for i in range(len(replay.replay_data)):
             key = replay.replay_data[i].keys
             if key > 0:
+                if click_frame_cnt < 3:
+                    click_pro.append(1)
+                    hold_pro.append(0)
+                else:
+                    click_pro.append(0)
+                    hold_pro.append(1)
+                    # 滑条起始阶段也补充hold
+                    if click_frame_cnt == 3:
+                        p = i - 1
+                        while p >= 0 and click_pro[p] == 1 and hold_pro[p] == 0:
+                            hold_pro[p] = 1
+                            p -= 1
                 click_frame_cnt += 1
             else:
-                click_frame_cnt = 0
-                click_pro.append(1)
-                hold_pro.append(0)
-
-            # 实测note最大click连续帧为3，所以大于3则进入滑条，
-            if click_frame_cnt > 3:
                 click_pro.append(0)
-                hold_pro.append(1)
-                # 把滑条click时也补上hold
-                if click_frame_cnt == 4:
-                    p = i - 1
-                    while p >= 0 and click_pro[p] == 1:
-                        hold_pro[p] = 1
+                hold_pro.append(0)
+                click_frame_cnt = 0
+
+        # === Step 2: 按 frame_time 逐帧对齐标签 ===
+        clicks = []
+        holds = []
 
         p = 0
         p_time = replay.replay_data[0].time_delta
 
-        # click数据集
         for frame_time in tqdm(times, "Processing Clicks"):
-
-            while p_time + 10 < frame_time and p < len(replay.replay_data):
+            # 向前找到小于等于 frame_time 的时间戳
+            while p + 1 < len(replay.replay_data) and p_time < frame_time:
                 p += 1
                 p_time += replay.replay_data[p].time_delta
 
-            click = 0
+            if p < len(replay.replay_data):
+                clicks.append(click_pro[p])
+                holds.append(hold_pro[p])
+            else:
+                # 末尾填0，防止数组越界
+                clicks.append(0)
+                holds.append(0)
 
-            time_now = p_time
-            p_now = p
-            while p_now < len(replay.replay_data) and frame_time + 10 > time_now:
-                key = replay.replay_data[p_now].keys
-                if key > 0:
-                    clicks.append(click_pro[p_now])
-                    holds.append(hold_pro[p_now])
-                    break
-                p_now += 1
 
         p = 0
         p_time = replay.replay_data[0].time_delta
@@ -121,7 +121,7 @@ def heat_map_generator():
         for frame_time in tqdm(times, "Processing Heatmaps"):
             heatmap = np.zeros((heatmap_height, heatmap_width), dtype=np.float32)
 
-            while p_time < frame_time and p < len(replay.replay_data):
+            while p_time < frame_time and p + 1 < len(replay.replay_data):
                 p += 1
                 p_time += replay.replay_data[p].time_delta
 

@@ -66,11 +66,11 @@ class RuntimeViewer:
             interpolation=cv2.INTER_NEAREST,
         )
 
-        # click
+
         cv2.putText(
             display,
-            f"click: {click}",
-            (10, 30),
+            "click:" + str(click),
+            (10, 90),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
@@ -79,12 +79,13 @@ class RuntimeViewer:
         cv2.putText(
             display,
             "O" * int(click / 0.1),
-            (10, 70),
+            (10, 120),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
             2,
         )
+
         # hold
         cv2.putText(
             display,
@@ -98,12 +99,14 @@ class RuntimeViewer:
         cv2.putText(
             display,
             "H" * int(hold / 0.1),
-            (10, 70),
+            (10, 60),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
             2,
         )
+        cv2.imshow("Heatmap Preview", display)
+
 
         cv2.imshow("Heatmap Preview", display)
         key = cv2.waitKey(1) & 0xFF

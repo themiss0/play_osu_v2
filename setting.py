@@ -11,6 +11,8 @@ left_click = "z"
 right_click = "x"
 window_name = "osu!"
 play_filed = [185, 59, 830, 648]  # 游戏区域范围，用box_detect得到, x, y, w, h
-dataset_path = "../data/dataset"
+# dataset_path = "../data/dataset"  #云上路径
+dataset_path = "dataset"
+
 heatmap_size = (96, 72)
 net_path = "net"

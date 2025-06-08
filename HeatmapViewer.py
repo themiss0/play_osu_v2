@@ -6,6 +6,7 @@ import os
 
 
 MODE = 1  # 0为从当前游戏所指谱面，1为推理输出
+show_data = False
 
 
 def safe_path(name):
@@ -85,45 +86,45 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
             (w * resize_factor, h * resize_factor),
             interpolation=cv2.INTER_NEAREST,
         )
+        if show_data:
+            cv2.putText(
+                display,
+                "click:" + str(click),
+                (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
+            cv2.putText(
+                display,
+                "O" * int(click / 0.1),
+                (10, 120),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
-        cv2.putText(
-            display,
-            "click:" + str(click),
-            (10, 110),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
-        )
-        cv2.putText(
-            display,
-            "O" * int(click / 0.1),
-            (10, 70),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
-        )
-
-        # hold
-        cv2.putText(
-            display,
-            f"hold: {hold}",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
-        )
-        cv2.putText(
-            display,
-            "H" * int(hold / 0.1),
-            (10, 70),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
-        )
+            # hold
+            cv2.putText(
+                display,
+                f"hold: {hold}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
+            cv2.putText(
+                display,
+                "H" * int(hold / 0.1),
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
         cv2.imshow("Heatmap Preview", display)
 
     last_frame_time = 0
@@ -178,7 +179,11 @@ def heatmap_viewer(name=None, version=None):
         pics = np.load("history/pics.npy")
         heats = np.load("history/heats.npy")
         clicks = np.load("history/clicks.npy")
-        heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
+        holds = np.load("history/holds.npy")
+        heatmap = [
+            (pic, heat, click, hold)
+            for pic, heat, click, hold in zip(pics, heats, clicks, holds)
+        ]
         show_heatmap_preview_gui(heatmap)
         return
 
@@ -192,7 +197,11 @@ def heatmap_viewer(name=None, version=None):
     pics = np.load(f"{dir}/pics.npy")
     heats = np.load(f"{dir}/heats.npy")
     clicks = np.load(f"{dir}/clicks.npy")
-    heatmap = [(pic, heat, click) for pic, heat, click in zip(pics, heats, clicks)]
+    holds = np.load(f"{dir}/holds.npy")
+    heatmap = [
+        (pic, heat, click, hold)
+        for pic, heat, click, hold in zip(pics, heats, clicks, holds)
+    ]
     show_heatmap_preview_gui(heatmap)
 
 

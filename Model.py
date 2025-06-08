@@ -37,15 +37,15 @@ except Exception as e:
 MODE = 2
 
 # 控制参数
-net_version = 3
-train_ecpoch = 14
+net_version = 4
+train_ecpoch = 3
 DATASET_PATH = (
     f"{setting.net_path}/heatmap_regression_net{net_version}_{train_ecpoch}.pth"
 )
 
 # 超参
-EPOCHS = 30
-BATCH_SIZE = 512
+EPOCHS = 1
+BATCH_SIZE = 64
 
 
 class Net(nn.Module):
@@ -134,8 +134,8 @@ class Net(nn.Module):
         u4 = self.conv_up2(u3)  # (B, 32, H, W)
 
         heatmap_predict = self.heat_predict(u4)
-        click_predict = self.click_predict(x5)
-        hold_predict = self.hold_predict(x5)
+        click_predict = self.click_predict(x5).squeeze(-1)
+        hold_predict = self.hold_predict(x5).squeeze(-1)
 
         return [heatmap_predict, click_predict, hold_predict]
 
@@ -187,6 +187,7 @@ def train(parameter_path=None):
                 map_sets.append(MyDataSet(dir))
 
         except Exception as e:
+            print("error in map " + dir + str(e))
             continue
 
     concat = ConcatDataset(map_sets)
@@ -195,8 +196,9 @@ def train(parameter_path=None):
         concat,
         [int(len(concat) * test_ratio), len(concat) - int(len(concat) * test_ratio)],
     )
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=BATCH_SIZE)
+    # train_loader = DataLoader(train_set, shuffle=True, batch_size=BATCH_SIZE)
     test_loader = DataLoader(test_set, shuffle=True, batch_size=BATCH_SIZE)
+    train_loader = test_loader
 
     print("dataset size: " + str(len(train_loader) * BATCH_SIZE))
 
@@ -241,7 +243,7 @@ def train(parameter_path=None):
                 hold = hold.to(device)
                 heat_predict, click_predict, hold_predict = net(pic)
                 loss = mtloss(
-                    heat_predict, heat, click_predict, click, hold_predict, hold
+                    epoch, heat_predict, heat, click_predict, click, hold_predict, hold
                 )
                 test_loss += loss.item()
         avg_test_loss = test_loss / len(test_loader)

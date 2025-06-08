@@ -7,14 +7,11 @@ from MemReader import MemReader
 import numpy as np
 
 
-
-
 def safe_path(name):
     import re
+
     # 替换为下划线或直接去掉非法字符
     return re.sub(r'[\\/:*?"<>|]', "", name)
-
-
 
 
 def main():
@@ -88,8 +85,6 @@ def main():
         ),
     )
 
-
-    
     VERSION = 1
     version_path = save_dir + "/" + "pic_version.txt"
     if os.path.exists(version_path):
@@ -98,7 +93,6 @@ def main():
                 VERSION = int(v.read()) + 1
             except Exception:
                 pass
-
 
     with open(version_path, "w") as v:
         v.write(str(VERSION))
