@@ -59,7 +59,7 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
 
     def update_display(frame_idx):
         # 获取当前帧数据
-        gray_img, heatmap, click = heatmap_data[frame_idx]
+        gray_img, heatmap, click, hold = heatmap_data[frame_idx]
 
         # 获取参数
         alpha = cv2.getTrackbarPos("Overlay Image (%)", "Heatmap Preview") / 100.0
@@ -98,6 +98,26 @@ def show_heatmap_preview_gui(heatmap_data, resize_factor=8):
         cv2.putText(
             display,
             "O" * int(click / 0.1),
+            (10, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
+        # hold
+        cv2.putText(
+            display,
+            f"hold: {hold}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            display,
+            "H" * int(hold / 0.1),
             (10, 70),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,

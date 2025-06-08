@@ -12,9 +12,11 @@ class MyDataSet(Dataset):
         pics = np.load(f"{setting.dataset_path}/{map_path}/pics.npy")
         times = np.load(f"{setting.dataset_path}/{map_path}/times.npy")
         clicks = np.load(f"{setting.dataset_path}/{map_path}/clicks.npy")
+        holds = np.load(f"{setting.dataset_path}/{map_path}/holds.npy")
 
         self.heatmaps = torch.from_numpy(heatmaps).float()
         self.clicks = torch.from_numpy(clicks).float()
+        self.holds = torch.from_numpy(holds.float())
         self.pics = torch.from_numpy(pics).float() / 255
         self.times = torch.from_numpy(times).float()
 
@@ -31,6 +33,7 @@ class MyDataSet(Dataset):
         heat_seq = self.heatmaps[start:end]  # (W, H, W)
         pic_seq = self.pics[start:end]
         click_seq = self.clicks[start:end]
+        hold_seq = self.holds[start:end]
 
         # 加 channel 维度 (W, H, W) -> (W, 1, H, W)
         if heat_seq.ndim == 3:
@@ -43,4 +46,5 @@ class MyDataSet(Dataset):
             heat_seq,  # (W, 1, H, W)
             pic_seq,  # (W, 1, H, W)
             click_seq,  # (W,)
+            hold_seq,  # (W, )
         ]

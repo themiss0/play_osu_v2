@@ -44,12 +44,7 @@ class RuntimeViewer:
             np.zeros(setting.heatmap_size, dtype=np.uint8),
         )
 
-    def update_frame(self, gray_img, heatmap, click=0):
-        """
-        gray_img: 单帧灰度图 (H, W)
-        heatmap: 单帧热力图 (H, W)，值范围 [0,1]
-        click: 点击数 (可选)
-        """
+    def update_frame(self, gray_img, heatmap, click=0, hold=0):
 
         alpha = cv2.getTrackbarPos("Overlay Image (%)", "Heatmap Preview") / 100.0
         beta = cv2.getTrackbarPos("Overlay Heatmap (%)", "Heatmap Preview") / 100.0
@@ -71,7 +66,7 @@ class RuntimeViewer:
             interpolation=cv2.INTER_NEAREST,
         )
 
-        # 叠加文字信息
+        # click
         cv2.putText(
             display,
             f"click: {click}",
@@ -84,6 +79,25 @@ class RuntimeViewer:
         cv2.putText(
             display,
             "O" * int(click / 0.1),
+            (10, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        # hold
+        cv2.putText(
+            display,
+            f"hold: {hold}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            display,
+            "H" * int(hold / 0.1),
             (10, 70),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,

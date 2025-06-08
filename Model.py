@@ -11,7 +11,7 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.utils.data import ConcatDataset
-from CnnDataSet import MyDataSet
+from MyDataSet import MyDataSet
 import setting
 import torch
 import torch.nn as nn
@@ -46,8 +46,6 @@ DATASET_PATH = (
 # 超参
 EPOCHS = 30
 BATCH_SIZE = 512
-# 在训练时click分支的loss权重会逐步增加，这是权重范围
-SMOOTH_MULTI_LOSS_WEIGHT_RANGE = [0.0, 0.0]
 
 
 class Net(nn.Module):
@@ -110,6 +108,16 @@ class Net(nn.Module):
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
+        # hold decode
+        self.hold_predict = torch.nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
+            nn.Flatten(),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
 
     def forward(self, frames):
         x1 = self.conv1(frames)  # (B, 32, H, W)
@@ -127,8 +135,9 @@ class Net(nn.Module):
 
         heatmap_predict = self.heat_predict(u4)
         click_predict = self.click_predict(x5)
-        
-        return [heatmap_predict, click_predict]
+        hold_predict = self.hold_predict(x5)
+
+        return [heatmap_predict, click_predict, hold_predict]
 
 
 # === 多任务损失 ===
@@ -137,25 +146,17 @@ class MultiTaskLoss(nn.Module):
         super().__init__()
         self.heat_loss = nn.MSELoss()
         self.click_loss = nn.BCELoss()
-        self.heat_weight = 1 - SMOOTH_MULTI_LOSS_WEIGHT_RANGE[0]
-        self.click_weight = SMOOTH_MULTI_LOSS_WEIGHT_RANGE[0]
-        self.weight_sub = self.heat_weight - self.click_weight
+        self.hold_loss = nn.BCELoss()
         self.total_batch_size = batchsize * epochs
 
-    def forward(self, heat_pred, heat_gt, click_pred, click_gt):
-        loss1 = self.heat_loss(heat_pred, heat_gt) * self.heat_weight
+    def forward(
+        self, epoch, heat_pred, heat_gt, click_pred, click_gt, hold_pred, hold_gt
+    ):
+        loss1 = self.heat_loss(heat_pred, heat_gt)
+        loss2 = self.click_loss(click_pred, click_gt)
+        loss3 = self.hold_loss(hold_pred, hold_gt)
 
-        return loss1
-        # loss2 = (
-        #     self.click_loss(click_pred.squeeze(), click_gt.squeeze())
-        #     * self.click_weight
-        # )
-
-        # weight_offset = self.weight_sub * 1 / self.total_batch_size
-        # self.click_weight -= weight_offset
-        # self.heat_weight += weight_offset
-
-        # return loss1 + loss2
+        return loss1 * 0.5 + loss2 * 0.25 + loss3 * 0.25
 
 
 def train(parameter_path=None):
@@ -207,15 +208,18 @@ def train(parameter_path=None):
         total_loss = 0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
 
-        for heat, pic, click in pbar:
+        for heat, pic, click, hold in pbar:
             heat = heat.to(device)
             pic = pic.to(device)
             click = click.to(device)
+            hold = hold.to(device)
             optimizer.zero_grad()
 
-            heat_predict, click_predict = net(pic)
+            heat_predict, click_predict, hold_predict = net(pic)
 
-            loss = mtloss(heat_predict, heat, click_predict, click)
+            loss = mtloss(
+                epoch, heat_predict, heat, click_predict, click, hold_predict, hold
+            )
             loss.backward()
             optimizer.step()
 
@@ -230,12 +234,15 @@ def train(parameter_path=None):
         net.eval()
         test_loss = 0
         with torch.no_grad():
-            for heat, pic, click in test_loader:
+            for heat, pic, click, hold in test_loader:
                 heat = heat.to(device)
                 pic = pic.to(device)
                 click = click.to(device)
-                heat_predict, click_predict = net(pic)
-                loss = mtloss(heat_predict, heat, click_predict, click)
+                hold = hold.to(device)
+                heat_predict, click_predict, hold_predict = net(pic)
+                loss = mtloss(
+                    heat_predict, heat, click_predict, click, hold_predict, hold
+                )
                 test_loss += loss.item()
         avg_test_loss = test_loss / len(test_loader)
         print(f"Test loss: {avg_test_loss:.6f}")
@@ -275,6 +282,7 @@ def test(parameter_path):
     pics = []
     heatmaps = []
     clicks = []
+    holds = []
     net.eval()
     runtimeViewer = RuntimeViewer()
 
@@ -318,27 +326,34 @@ def test(parameter_path):
             pic = torch.from_numpy(pic).float() / 255
 
             input = pic.unsqueeze(0).unsqueeze(0).to(device)
-            heat_predict, click_predict = net(input)
+            heat_predict, click_predict, hold_predict = net(input)
 
             heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
             clicks.append(click_predict.cpu().numpy())
-            runtimeViewer.update_frame(pics[-1], heatmaps[-1], clicks[-1])
+            holds.append(hold_predict.cpu().numpy())
+            runtimeViewer.update_frame(pics[-1], heatmaps[-1], clicks[-1], holds[-1])
 
             pos, _ = get_peak_position(heat_predict[0][0])
             joy.move_to_game_pos(pos)
-            if click_predict > 0.5:
-                joy.hold()
+            click_now = False
+            if click_now == False:
+                if click_predict > 0.5:
+                    joy.hold()
+                    clicknow = True
             else:
-                joy.unhold()
+                if hold_predict < 0.5:
+                    joy.unhold()
             mem.update()
         pass
     print("song over")
     pics = np.stack(pics)
     heatmaps = np.stack(heatmaps)
+    holds = np.stack(holds)
     clicks = np.stack(clicks)
     np.save(f"history/pics.npy", pics)
     np.save(f"history/clicks.npy", clicks)
     np.save(f"history/heats.npy", heatmaps)
+    np.save(f"history/holds.npy", holds)
 
 
 def get_peak_position(heatmap):

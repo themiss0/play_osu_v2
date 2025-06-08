@@ -7,7 +7,7 @@ import pickle
 from tqdm import tqdm
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 1
+VERSION = 2
 
 
 def heat_map_generator():
@@ -61,14 +61,39 @@ def heat_map_generator():
         radius = 54.4 - 4.48 * cs
         heatmaps = []
         clicks = []
+        holds = []
         mapper = OsuCoordMapper(setting.heatmap_size, cs)
         preempt = mapper.get_preempt_time(ar)
 
         note_radius_normal = radius / (512 + 2 * radius), radius / (384 + 2 * radius)
 
+        click_pro = []
+        hold_pro = []
+
+        # 此段为提取回放中的点击，分开为click和hold；p为临时变量作为指针，
+        p = 0
+        click_frame_cnt = 0
+        for i in range(len(replay.replay_data)):
+            key = replay.replay_data[i].keys
+            if key > 0:
+                click_frame_cnt += 1
+            else:
+                click_frame_cnt = 0
+                click_pro.append(1)
+                hold_pro.append(0)
+
+            # 实测note最大click连续帧为3，所以大于3则进入滑条，
+            if click_frame_cnt > 3:
+                click_pro.append(0)
+                hold_pro.append(1)
+                # 把滑条click时也补上hold
+                if click_frame_cnt == 4:
+                    p = i - 1
+                    while p >= 0 and click_pro[p] == 1:
+                        hold_pro[p] = 1
+
         p = 0
         p_time = replay.replay_data[0].time_delta
-        click_frame_cnt = 0
 
         # click数据集
         for frame_time in tqdm(times, "Processing Clicks"):
@@ -82,18 +107,12 @@ def heat_map_generator():
             time_now = p_time
             p_now = p
             while p_now < len(replay.replay_data) and frame_time + 10 > time_now:
-                f = replay.replay_data[p_now]
-
-                if f.keys > 0:
-                    click = 0.6 if click_frame_cnt > 3 else 1.0
-                    click_frame_cnt += 1
+                key = replay.replay_data[p_now].keys
+                if key > 0:
+                    clicks.append(click_pro[p_now])
+                    holds.append(hold_pro[p_now])
                     break
-                else:
-                    click_frame_cnt = 0
-                time_now += f.time_delta
                 p_now += 1
-
-            clicks.append(click)
 
         p = 0
         p_time = replay.replay_data[0].time_delta
@@ -159,8 +178,10 @@ def heat_map_generator():
 
         clicks = np.stack(clicks)
         heatmaps = np.stack(heatmaps)
+        holds = np.stack(holds)
         np.save(dir + "/" + "clicks.npy", clicks)
         np.save(dir + "/" + "heats.npy", heatmaps)
+        np.save(dir + "/" + "holds.npy", holds)
 
         with open(version_path, "w") as v:
             v.writelines([str(VERSION) + "\n", str(pic_version) + "\n"])
