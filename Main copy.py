@@ -6,7 +6,7 @@ import numpy as np
 import setting
 import torch
 from HeatNet import HeatNet
-from ClickNet import ClickNet
+from AfterHeatNet import ClickHoldNet
 import pygetwindow as gw
 from RuntimeViewer import RuntimeViewer
 from Controller import Controller
@@ -22,7 +22,7 @@ heat_net_version = 5
 heat_net_train_ecpoch = 20
 
 click_net_version = 0
-click_net_train_ecpoch = 2
+click_net_train_ecpoch = 20
 
 device = torch_directml.device()
 
@@ -31,7 +31,7 @@ HEAT_NET_PARAM_PATH = (
     f"{setting.net_path}/heat_net{heat_net_version}_{heat_net_train_ecpoch}.pth"
 )
 CLICK_NET_PARAM_PATH = (
-    f"{setting.net_path}/click_net{click_net_version}_{click_net_train_ecpoch}.pth"
+    f"{setting.net_path}/click_hold_net{click_net_version}_{click_net_train_ecpoch}.pth"
 )
 
 
@@ -39,11 +39,11 @@ def test(heat_net_path, click_net_path):
     cam = Camera()
     mem = MemReader()
     heat_net = HeatNet().to(device)
-    click_net = ClickNet().to(device)
+    click_hold_net = ClickHoldNet().to(device)
     if not close_heat_net:
         heat_net.load_state_dict(torch.load(heat_net_path, map_location="cpu"))
     if not close_click_net:
-        click_net.load_state_dict(torch.load(click_net_path, map_location="cpu"))
+        click_hold_net.load_state_dict(torch.load(click_net_path, map_location="cpu"))
 
     joy = Controller(gw.getWindowsWithTitle(setting.window_name)[0])
 
@@ -52,7 +52,7 @@ def test(heat_net_path, click_net_path):
     clicks = []
     holds = []
     heat_net.eval()
-    click_net.eval()
+    click_hold_net.eval()
     runtimeViewer = RuntimeViewer()
 
     with torch.no_grad():
@@ -96,7 +96,7 @@ def test(heat_net_path, click_net_path):
 
             input = pic.unsqueeze(0).unsqueeze(0).to(device)
             heat_predict = heat_net(input)
-            click_predict, hold_predict = click_net(input)
+            click_predict, hold_predict = click_hold_net(heat_predict, input)
 
             heatmaps.append(heat_predict.squeeze(0).squeeze(0).cpu().numpy())
             clicks.append(click_predict.cpu().numpy())

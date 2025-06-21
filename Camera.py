@@ -17,7 +17,7 @@ class Camera:
             setting.window_resize[0],
             setting.window_resize[1],
         )
-        self.ww.moveTo(100, 100)
+        self.ww.moveTo(150, 50)
 
     def get(self) -> np.array:
         """return windowshot or None if target window out of screen"""

@@ -1,22 +1,33 @@
-# V2版本
-
-5.14
-## 目标
-- 基本能预测note和slider的位置和打击时间
+# Play Osu Like Neuro
+本项目实现了一个能够
 
 
-## 实现方式和过程
+## 配置方法
 
-通过CNN+RNN(GRU)实现图像特征提取和时间序列特征分析，依然是输出热图，通过heat判定点击和长按。
+1. 环境要求：Windows10及以上系统, python解释器为3.10版本
+2. python依赖：请详见根目录下的requirements.txt
+   **注意**
+   torch_directml不是必须的，如果你已经配置好cuda并打算用cuda推理，不要安装这个依赖
+   
+3. 其他依赖：
+- 最新的osu!lazer游戏，可以在[官网](osu.ppy.sh)上下载
+- 最新的[tosu](github.com/tosuapp/tosu)插件
 
-发现osrparser可以提取replay信息，可以提取autoplay的鼠标点击和坐标来制作数据集。
+4. 构建流程：
+   由于构建流程设计到数据集采集和模型训练，比较繁琐，故不细讲，只给出推理流程。
 
-发现V1输出的heatmaps同时包含了点击概率和光标位置概率，两者耦合可能会混淆模型关注点，准备改成点击概率序列+位置heatmaps的形式，但是如何制作数据集和设计模型呢
+5. 推理流程：
+   1. 将项目克隆到本地
+   2. 打开游戏和tosu插件，等待tosu运行并弹出控制台webui，将tosu检测频率调到最小
+   3. 在设置中代开游戏边界，设置mod为relex
+   4. 运行box_detect，并进入游戏任意一个谱面，记录box_detect的输出
+   5. 将稳定的数值修改setting中的play_field
+   6. 退出游戏到选择界面
+   7. 运行Main，等待加载完成后，进入游戏任意一张谱面
+   8. 此时鼠标会自动移动，并有新窗口显示模型可视化输出
+   9. 等待运行完成后Main自动关闭
+   10. 可以运行HeatmapViewer查看上一次推理的回放
 
-数据集现在分离了，每个map一个文件夹，包含了训练需要的数据
-meta.pkl:字典类型，包含map的cs和ar
-rep.osr:auto模式的回放，通过osrparser提取光标轨迹和点击作为数据
-pics.npy:三维nparray，[pic, h, w]，作为map的图像序列，每张图片也是下面对象的基准
-times.npy:一维nparray，每张pic对应的time
-heats.npy:三维nparray，[heat, h, w]，热图，由HeatGen生成，用于描述光标注意力焦点
-clicks.npy:一维nparray，对应改时间需要点击的概率
+6. 其他杂项
+   1. 大部分模块在头部有控制参数，可以调整模块功能
+   2. ……

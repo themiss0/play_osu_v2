@@ -5,8 +5,8 @@ import numpy as np
 import os
 
 
-MODE = 1  # 0为从当前游戏所指谱面，1为推理输出
-show_data = False
+MODE = 2  # 0为从当前游戏所指谱面，1为推理输出，2为指定谱面
+show_data = True
 
 
 def safe_path(name):
@@ -22,8 +22,10 @@ def main():
         mem = MemReader()
         mem.update()
         heatmap_viewer(safe_path(mem.song), safe_path(mem.version))
-    else:
+    elif MODE == 1:
         heatmap_viewer()
+    else:
+        heatmap_viewer("Ai no Sukima", "hard")
 
 
 def show_heatmap_preview_gui(heatmap_data, resize_factor=8):

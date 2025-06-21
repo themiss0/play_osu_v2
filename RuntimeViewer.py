@@ -25,7 +25,7 @@ class RuntimeViewer:
         """
         cv2.namedWindow("Heatmap Preview", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Heatmap Preview", 800, 600)
-        cv2.moveWindow("Heatmap Preview", 1600, 200)
+        cv2.moveWindow("Heatmap Preview", 1340, 50)
         cv2.createTrackbar(
             "Overlay Heatmap (%)", "Heatmap Preview", 30, 100, lambda x: None
         )

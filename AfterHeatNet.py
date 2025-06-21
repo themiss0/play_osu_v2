@@ -1,4 +1,3 @@
-# %%
 import os
 import matplotlib.pyplot as plt
 import torch.utils
@@ -13,6 +12,7 @@ from MyDataSet import MyDataSet
 import setting
 import torch
 import torch.nn as nn
+from HeatNet import HeatNet
 
 device = None
 try:
@@ -22,39 +22,46 @@ try:
 except Exception as e:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# 0：训练；1：在已有模型参数上训练；
+# 0：训练；1：在已有模型参数上训练
 MODE = 0
 
 # 控制参数
-net_version = 2
+heat_net_version = 5
+heat_net_train_ecpoch = 20
+
+net_version = 0
 train_ecpoch = 0
-DATASET_PATH = f"{setting.net_path}/click_net{net_version}_{train_ecpoch}.pth"
+
 
 # 超参
+HEAT_NET_PARAM_PATH = (
+    f"{setting.net_path}/heat_net{heat_net_version}_{heat_net_train_ecpoch}.pth"
+)
+
+DATASET_PATH = f"{setting.net_path}/click_hold_net{net_version}_{train_ecpoch}.pth"
 EPOCHS = 1
-BATCH_SIZE = 64
+BATCH_SIZE = 1024
+
+import torch
+import torch.nn.functional as F
+import torch.nn as nn
 
 
-class ClickNet(nn.Module):
-
+class ClickHoldNet(nn.Module):
     def __init__(self):
         super().__init__()
-        # (B, 1, H, W)
-        h = 72
-        w = 96
+        h, w = 72, 96
 
-        # click decode
-        self.click_predict = torch.nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),  # (B, 32, H, W)
+        # click分支
+        self.click_predict = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # (B, 64, H, W)
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # (B, 64, H/2, W/2)
-            # self.conv3,
-            # self.pool2,
-            nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
+            nn.MaxPool2d(2),
+            nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
             nn.Linear(64, 256),
             nn.BatchNorm1d(256),
@@ -62,18 +69,16 @@ class ClickNet(nn.Module):
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
-        # hold decode
-        self.hold_predict = torch.nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),  # (B, 32, H, W)
+        # hold分支
+        self.hold_predict = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # (B, 64, H, W)
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # (B, 64, H/2, W/2)
-            # self.conv3,
-            # self.pool2,
-            nn.AdaptiveAvgPool2d(1),  # (B, 128, 1, 1)
+            nn.MaxPool2d(2),
+            nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
             nn.Linear(64, 256),
             nn.BatchNorm1d(256),
@@ -82,19 +87,78 @@ class ClickNet(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, frames):
-        click_predict = self.click_predict(frames).squeeze(-1)
-        hold_predict = self.hold_predict(frames).squeeze(-1)
+    def forward(self, heatmap, frames):
+        """
+        frames: (B, 1, H, W)
+        heatmap: (B, 1, H, W)
+        """
+        B, _, H, W = frames.shape
 
-        return [click_predict, hold_predict]
+        # ---- Padding操作 ----
+        pad = 16  # 足够大的padding，确保crop不越界
+        frames_padded = F.pad(frames, pad=(pad, pad, pad, pad), mode="replicate")
+        heatmap_padded = F.pad(heatmap, pad=(pad, pad, pad, pad), mode="replicate")
+
+        # ---- 找最大点坐标 ----
+        max_vals, max_idxs = torch.max(heatmap.view(B, -1), dim=1)
+        max_rows = max_idxs // W
+        max_cols = max_idxs % W
+
+        crops = []
+        crop_size = 32  # 可以根据需求微调
+        half_crop = crop_size // 2
+
+        for b in range(B):
+            r, c = max_rows[b] + pad, max_cols[b] + pad  # offset for padding
+            r_start = r - half_crop
+            r_end = r + half_crop
+            c_start = c - half_crop
+            c_end = c + half_crop
+
+            # 裁剪patch并resize到原图大小
+            crop = frames_padded[b : b + 1, :, r_start:r_end, c_start:c_end]
+            crop_resized = F.interpolate(
+                crop, size=(H, W), mode="bilinear", align_corners=False
+            )
+            crops.append(crop_resized)
+
+        click_input = torch.cat(crops, dim=0)  # (B, 1, H, W)
+
+        # ---- 推理 ----
+        click_out = self.click_predict(click_input).squeeze(-1)
+        hold_out = self.hold_predict(frames).squeeze(-1)
+
+        return click_out, hold_out
 
 
-# === 多任务损失 ===
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.eps = 1e-7  # 防止log(0)
+
+    def forward(self, pred, target):
+        """
+        pred: (B,) sigmoid输出
+        target: (B,) 0或1
+        """
+        pred = pred.clamp(min=self.eps, max=1.0 - self.eps)  # 防止log(0)
+
+        pos_loss = -self.alpha * ((1 - pred) ** self.gamma) * target * torch.log(pred)
+        neg_loss = (
+            -(1 - self.alpha) * (pred**self.gamma) * (1 - target) * torch.log(1 - pred)
+        )
+
+        loss = pos_loss + neg_loss
+        return loss.mean()
+
+
 class MultiTaskLoss(nn.Module):
     def __init__(self, batchsize=BATCH_SIZE, epochs=EPOCHS):
         super().__init__()
-        self.click_loss = nn.BCELoss()
-        self.hold_loss = nn.BCELoss()
+        self.click_loss = FocalLoss(alpha=0.25, gamma=2)
+        self.hold_loss = nn.BCELoss()  # 也可以换成FocalLoss
         self.total_batch_size = batchsize * epochs
 
     def forward(self, epoch, click_pred, click_gt, hold_pred, hold_gt):
@@ -105,11 +169,16 @@ class MultiTaskLoss(nn.Module):
 
 
 def train(parameter_path=None):
+    heat_net = HeatNet().to(device)
+    heat_net.load_state_dict(
+        torch.load(HEAT_NET_PARAM_PATH, weights_only=True, map_location=device)
+    )
+    heat_net.eval()
 
-    net = ClickNet().to(device)
+    net = ClickHoldNet().to(device)
     if parameter_path is not None:
         try:
-            net.load_state_dict(torch.load(parameter_path), weights_only=True)
+            net.load_state_dict(torch.load(parameter_path, weights_only=True))
         except:
             print("can't find dataset_parameter")
             exit()
@@ -162,7 +231,9 @@ def train(parameter_path=None):
             hold = hold.to(device)
             optimizer.zero_grad()
 
-            click_predict, hold_predict = net(pic)
+            with torch.no_grad():
+                heat_out = heat_net(pic)
+            click_predict, hold_predict = net(heat_out, pic)
 
             loss = mtloss(epoch, click_predict, click, hold_predict, hold)
             loss.backward()
@@ -183,9 +254,10 @@ def train(parameter_path=None):
                 pic = pic.to(device)
                 click = click.to(device)
                 hold = hold.to(device)
-                click_predict, hold_predict = net(pic)
-                loss = mtloss(epoch, click_predict, click, hold_predict, hold)
+                click_predict, hold_predict = net(heat_net(pic), pic)
+                loss = mtloss(click_predict, click, hold_predict, hold)
                 test_loss += loss.item()
+
         avg_test_loss = test_loss / len(test_loader)
         print(f"Test loss: {avg_test_loss:.6f}")
 
@@ -207,9 +279,11 @@ def train(parameter_path=None):
         # 保存训练好的权重，每训练一轮保存一次
         torch.save(
             net.state_dict(),
-            f"{setting.net_path}/click_net{net_version}_{epoch +train_ecpoch + 1}.pth",
+            f"{setting.net_path}/click_hold_net{net_version}_{epoch +train_ecpoch + 1}.pth",
         )
-        print(f"Model saved to click_net{net_version}_{epoch + train_ecpoch + 1}.pth")
+        print(
+            f"Model saved to click_hold_net{net_version}_{epoch + train_ecpoch + 1}.pth"
+        )
 
 
 if __name__ == "__main__":
@@ -217,5 +291,3 @@ if __name__ == "__main__":
         train()
     elif MODE == 1:
         train(DATASET_PATH)
-
-# %%
