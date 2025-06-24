@@ -17,7 +17,7 @@ import torch_directml
 
 # 控制参数
 close_heat_net = False
-close_click_net = False
+close_click_net = True
 heat_net_version = 5
 heat_net_train_ecpoch = 20
 
