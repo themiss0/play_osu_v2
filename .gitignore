@@ -1,7 +1,6 @@
 __pycache__
-dataset
+dataset/*
 develop_log
 osu_parse
-tosu
 history/*
 test.py
