@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 
-MODE = 2  # 0为从当前游戏所指谱面，1为推理输出，2为指定谱面
+MODE = 0  # 0为从当前游戏所指谱面，1为推理输出，2为指定谱面
 show_data = True
 
 
