@@ -7,7 +7,7 @@ import pickle
 from tqdm import tqdm
 
 # 每次更新heatgen的代码时，应该修改为不同的值
-VERSION = 3
+VERSION = 5
 
 
 def heat_map_generator():

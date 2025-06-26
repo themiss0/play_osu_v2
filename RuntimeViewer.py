@@ -44,8 +44,9 @@ class RuntimeViewer:
             np.zeros(setting.heatmap_size, dtype=np.uint8),
         )
 
-    def update_frame(self, gray_img, heatmap, click=0, hold=0):
+    def update_frame(self, gray_img, heatmap, click=0, hold=0, *args):
 
+        return
         alpha = cv2.getTrackbarPos("Overlay Image (%)", "Heatmap Preview") / 100.0
         beta = cv2.getTrackbarPos("Overlay Heatmap (%)", "Heatmap Preview") / 100.0
         cmap_index = cv2.getTrackbarPos("Colormap", "Heatmap Preview")
@@ -65,7 +66,6 @@ class RuntimeViewer:
             (w * self.resize_factor, h * self.resize_factor),
             interpolation=cv2.INTER_NEAREST,
         )
-
 
         cv2.putText(
             display,
@@ -106,7 +106,6 @@ class RuntimeViewer:
             2,
         )
         cv2.imshow("Heatmap Preview", display)
-
 
         cv2.imshow("Heatmap Preview", display)
         key = cv2.waitKey(1) & 0xFF
