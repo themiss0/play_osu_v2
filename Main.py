@@ -17,12 +17,12 @@ import torch_directml
 
 # 控制参数
 close_heat_net = False
-close_click_net = True
+close_click_net = False
 heat_net_version = 5
 heat_net_train_ecpoch = 20
 
 click_net_version = 0
-click_net_train_ecpoch = 2
+click_net_train_ecpoch = 3
 
 device = torch_directml.device()
 
